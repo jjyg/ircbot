@@ -34,7 +34,7 @@ class Admin
 			end
 		when '!quit'
 			irc.send 'quit :requested'
-		when /^!quit .*/
+		when /^!quit (.*)/
 			irc.send "quit :#$1"
 		when /^!raw (.*)/
 			irc.send $1
@@ -85,7 +85,7 @@ class GoogleSearch
 		when /^!(?:search|google) +(.*)/
 			return if not defined? HttpClient
 			term = $1
-			pg = HttpClient.new("http://www.google.com/").get("/search?q=#{HttpServer.urlenc term}")
+			pg = HttpClient.open("http://www.google.com/") { |h| h.get("/search?q=#{HttpServer.urlenc term}") }
 			if pg.status == 200
 				stat = 0
 				url = nil
@@ -138,12 +138,13 @@ class GoogleTranslate
 	end
 
 	def translate(l1, l2, msg)
-		h = HttpClient.new('www.google.com')
-		p = h.get("/uds/Gtranslate?callback=cb&context=22&langpair=#{l1}%7C#{l2}&key=notsupplied&v=1.0&q=" + HttpServer.urlenc(msg))
-		if p.status == 200 and transl = p.content[/\{"translatedText":"(.*)"\}, /, 1]
-			transl.gsub!(/\\u00(..)/) { $1.hex.chr }
-			HttpServer.htmlentitiesdec(transl)
-		end
+		HttpClient.open('www.google.com') { |h|
+			p = h.get("/uds/Gtranslate?callback=cb&context=22&langpair=#{l1}%7C#{l2}&key=notsupplied&v=1.0&q=" + HttpServer.urlenc(msg))
+			if p.status == 200 and transl = p.content[/\{"translatedText":"(.*)"\}, /, 1]
+				transl.gsub!(/\\u00(..)/) { $1.hex.chr }
+				HttpServer.htmlentitiesdec(transl)
+			end
+		}
 	end
 
 	def help ; "Translate sentences using Google Translate - !tr <in> <out> <phrase> eg '!tr fr en Bonjour'" end
@@ -184,7 +185,7 @@ class RSS
 		name, url, lasttitle = rsses[@cur_rss].split(/\s+/, 3)
 
 		return if not url
-		rss = parsehtml HttpClient.new(url).get(url).content
+		rss = parsehtml HttpClient.open(url) { |h| h.get(url) }.content
 
 		# check last post: content of first <title> in <item> / <entry>
 		initem = intitle = false
@@ -297,13 +298,18 @@ class Twitter
 		CONF[:twitter_account]
 	end
 
-	def http
+	def http_post(url, pd={})
 		pass = CONF[:twitter_password] || File.read(CONF[:twitter_password_file]).chomp
-		HttpClient.new("http://#{account}:#{pass}@twitter.com/")
+		HttpClient.open("http://#{account}:#{pass}@twitter.com/") { |h| h.post(url, pd) }
+	end
+
+	def http_get(url)
+		pass = CONF[:twitter_password] || File.read(CONF[:twitter_password_file]).chomp
+		HttpClient.open("http://#{account}:#{pass}@twitter.com/") { |h| h.get(url) }
 	end
 
 	def poll_twitter(irc)
-		rss = parsehtml http.get("/statuses/friends_timeline/#{account}.rss").content, true
+		rss = parsehtml http_get("/statuses/friends_timeline/#{account}.rss").content, true
 		lastag = nil
 		rss.delete_if { |tag|
 			if tag.type == 'String'; lastag['str'] = twit_decode_html(tag['content']) ; true
@@ -330,7 +336,7 @@ class Twitter
 			end
 		}
 
-		rpl = parsehtml http.get("/statuses/replies.xml").content, true
+		rpl = parsehtml http_get("/statuses/replies.xml").content, true
 		lastag = nil
 		rpl.delete_if { |tag|
 			if tag.type == 'String'; lastag['str'] = twit_decode_html(tag['content']) ; true
@@ -364,13 +370,13 @@ class Twitter
 			msg = $1
 			msg = UnUTF8.new(msg).to_s
 			msg = HttpServer.htmlentitiesenc(msg)
-			pg = http.post('/statuses/update.xml', 'status'=>msg, 'source'=>'twitterircgateway')
+			pg = http_post('/statuses/update.xml', 'status'=>msg, 'source'=>'twitterircgateway')
 			irc.repl(pg.status == 200 ? "http://twitter.com/#{account}" : 'fail')
 		when /^!follow (.*)/
-			pg = http.post("/friendships/create/#$1.xml", {})
+			pg = http_post("/friendships/create/#$1.xml")
 			irc.repl(pg.status == 200 ? 'ok' : 'fail')
 		when /^!nofollow (.*)/
-			pg = http.post("/friendships/destroy/#$1.xml", {})
+			pg = http_post("/friendships/destroy/#$1.xml")
 			irc.repl(pg.status == 200 ? 'ok' : 'fail')
 		end
 	end
@@ -481,13 +487,13 @@ class Url
 					u = u+'/' if u =~ /:\/\/[^\/]*$/
 					Timeout.timeout(40) {
 						t = nil
-						HttpClient.new(u).get(u).parse.each { |e|
+						HttpClient.open(u) { |h| h.get(u).parse.each { |e|
 							case e.type
 							when 'title'; t = ''
 							when '/title'; irc.repl t if t; break
 							when 'String'; t << e['content'] if t
 							end
-						}
+						} }
 					}
 				rescue Object
 					#irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
