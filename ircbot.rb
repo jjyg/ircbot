@@ -94,8 +94,9 @@ class GoogleSearch
 					case t.type
 					when 'Comment'; stat += 1 if t['content'] == 'm' or t['content'] == 'n'
 					when 'a'; url ||= t['href'] if stat == 1
-					when 'h2'; calc = true if t['class'] == 'r'
-					when 'String'; if calc ; irc.repl t['content'] ; calc = nil ; end
+					when 'h2'; calc = '' if t['class'] == 'r'
+					when '/h2'; if calc ; irc.repl calc ; calc = nil ; end
+					when 'String'; if calc ; calc << t['content'] ; end
 					end
 					stat != 1
 				}
@@ -205,7 +206,7 @@ class RSS
 		File.open('rss.txt.tmp', 'w') { |fd| fd.puts rsses }
 		File.rename('rss.txt.tmp', 'rss.txt')
 
-		irc.pm "rss: #{name}: #{title}", irc.chan
+		irc.pm "rss: #{name}  #{title}", irc.chan
 	end
 
 	def handle_msg(irc, msg, from, to)
@@ -427,7 +428,7 @@ class Quote
 
 		case type
 		when 'add'
-			quote = Quote.new(Time.now, owner, arg.gsub(/<(\S+?)>/, "\00303<\\1>\003"))
+			quote = Quote.new(Time.now, owner, arg.gsub(/< ?(\S+?)>/, "\00303<\\1>\003"))
 			File.open('quotes.txt', 'a') { |fd| fd.puts quote.store }
 			irc.repl "added quote #{q.length}"
 		when '', 'get', 'topic'
@@ -480,24 +481,47 @@ class Url
 	end
 
 	def handle_msg(irc, msg, from, to)
-		if to.downcase == irc.chan and msg =~ /\/\S*\//
-			msg.scan(/\S+\.\S+\/\S*\/\S*|\S+:\/\/\S*/) { |u|
-				File.open('urls.txt', 'a') { |fd| fd.puts u }
+		if msg =~ /\/\S*\//
+			list = (File.readlines('urls.txt').uniq.map { |u| u.split.first } rescue [])
+			msg.scan(%r{\S+\.\S+/\S*/\S*|\S+://\S*}) { |u|
+				t = pt = nil
+				if u =~ %r{(.*twitter.com)/#!(/.*/status/.*)}
+					u = $1 + $2
+					t = u + ' '
+				end
+				if list.include? u
+					pt = 'old'
+				end
 				begin
-					u = u+'/' if u =~ /:\/\/[^\/]*$/
+					u = u+'/' if u =~ %r{://[^/]*$}
 					Timeout.timeout(40) {
-						t = nil
-						HttpClient.open(u) { |h| h.get(u).parse.each { |e|
-							case e.type
-							when 'title'; t = ''
-							when '/title'; irc.repl t if t; break
-							when 'String'; t << e['content'] if t
+						HttpClient.open(u) { |h|
+							next if not ps = h.get(u).parse
+							if d = ps.find { |e| e.type == 'meta' and e['name'] == 'description' }
+								d = d['content']
 							end
-						} }
+							ps.each { |e|
+								case e.type
+								when 'title'; t ||= ''
+								when 'String'; t << e['content'] if t
+								when '/title'
+									if t and d and t.index(': ')
+										twitwho, twitwhat = t.split(': ', 2)
+										twitwhat = twitwhat.chomp(' ...')
+										if twitwhat == d[0, twitwhat.length]
+											t = twitwho + ': ' + d
+										end
+									end
+									irc.repl "#{pt + ' - ' if pt}" + t[0, 512] if t and t != ''
+									break
+								end
+							}
+						}
 					}
 				rescue Object
 					#irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
 				end
+				File.open('urls.txt', 'a') { |fd| fd.puts "#{u}   #{t[0, 512] if t}" }
 			}
 		end
 
@@ -788,7 +812,7 @@ class IrcBot
 	end
 
 	def pm(l, dst=@chan)
-		l.to_s.each { |l|
+		l.to_s.gsub("\r", '').each { |l|	# g hax fix
 			l.chomp!
 			send "PRIVMSG #{dst} :#{l.empty? ? ' ' : l}"
 		}
@@ -837,10 +861,14 @@ class IrcBot
 		$stdin.close rescue nil
 		$stdout.close rescue nil
 		$stderr.close rescue nil
-		exit if fork
+		exit! if fork
 		while chld = fork
 			sleep(1200)
-			loop { Process.waitpid(chld) rescue break }
+			loop { begin
+					Process.waitpid(chld)
+				rescue Errno::ECHILD
+					break
+				end }
 		end
 		load __FILE__
 		new.run
