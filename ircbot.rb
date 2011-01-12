@@ -623,13 +623,11 @@ class Op
 			todo = []
 			(@optmp ||= []).each { |n|
 				m, n = n[0], n[1..-1] if n[0] == ?@ or n[0] == ?+
-				#$blacklist ||= 'testic'
-				case n
-				#when /^#$blacklist/i; todo << ['-v', n] if m == ?+ ; todo << ['-o', n] if m == ?@
-				when irc.nick; return if m != ?@
-				when /bot/i; todo << ['-o', n] if m == ?@ ; todo << ['+v', n] if m != ?+
-				else todo << ['+o', n] if m != ?@
+				if n == irc.nick
+					return if m != ?@
+					next
 				end
+				chmod(todo, m, n)
 			}
 			@optmp.clear
 			todo << ['+v', irc.nick] if not @voiced
@@ -646,6 +644,15 @@ class Op
 		end
 	end
 
+	def chmod(todo, m, n)
+		#$blacklist ||= 'testic'
+		case n
+		#when /^#$blacklist/i; todo << ['-v', n] if m == ?+ ; todo << ['-o', n] if m == ?@
+		when /bot/i; todo << ['-o', n] if m == ?@ ; todo << ['+v', n] if m != ?+
+		else todo << ['+o', n] if m != ?@
+		end
+	end
+
 	def handle_msg(irc, msg, from, to)
 		case msg
 		when '!op'
@@ -659,6 +666,31 @@ class Op
 	end
 
 	def help ; "op all chan when bot is oped - also !op / !(no)keepop" end
+end
+
+class Youtube
+	def initialize(irc)
+		irc.plugin_msg << self
+	end
+
+	def handle_msg(irc, msg, from, to)
+		case msg
+		when /www.youtube.com\/watch\?v=([\w-]*)/
+			return if not defined? HttpClient
+			id = $1
+			pg = HttpClient.open("http://www.youtube.com/") { |h| h.get("/get_video_info?video_id=#{id}") }
+			tok = pg.content.to_s.split('&').map { |s| s.split('=', 2) }.assoc('token').to_a[1]
+			url = nil
+			if tok and fmt = [37, 22, 35, 18, 5, 17, 13].find { |f| HttpClient.open("http://www.youtube.com/") { |h|
+				url = "http://www.youtube.com/get_video?video_id=#{id}&t=#{tok}&fmt=#{f}"
+				h.head(url).status != 404
+			} }
+				irc.repl url
+			end
+		end
+	end
+
+	def help ; "shows youtube video url" end
 end
 
 class Help
@@ -845,7 +877,7 @@ CONF = {
 	:admin_re => /^bob!~marcel@roots.org$/,
 	:twitter_account => 'bla',
 	:twitter_password => 'blabla',
-	:plugins => [Admin, GoogleSearch, GoogleTranslate, RSS, Twitter, Quote, Url, Seen, Op, Help]
+	:plugins => [Admin, GoogleSearch, GoogleTranslate, RSS, Twitter, Quote, Url, Seen, Op, Help, Youtube]
 }
 
 IrcBot.start
