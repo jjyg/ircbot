@@ -683,9 +683,11 @@ class Op
 			irc.send "mode #{irc.chan} +o #{from.sub(/!.*/, '')}"
 		when '!keepop'
 			@keepop = true
+			irc.repl 'ok'
 		when '!nokeepop'
 			@keepop = false
 			irc.send "mode #{irc.chan} -o #{irc.nick}"
+			irc.repl 'ok'
 		end
 	end
 
@@ -728,7 +730,7 @@ class Help
 			irc.repl irc.plugins.flatten.uniq.map { |plug| plug.class.name }.sort.join(' ')
 		when /^!help (.*)/
 			name = $1.downcase
-			pl = irc.plugin_msg.find { |pl| pl.class.name.downcase.include? name }
+			pl = irc.plugin_msg.sort_by { |pl| pl.class.name.to_s.length }.find { |pl| pl.class.name.downcase.include? name }
 			if not pl
 				irc.repl 'unknown plugin'
 			else
