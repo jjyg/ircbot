@@ -249,6 +249,13 @@ class Twitter
 	def initialize(irc)
 		irc.plugin_idle << self
 		irc.plugin_msg << self
+		@oauth = {}
+		@oauth[:consumer_key], @oauth[:consumer_secret], @oauth[:token], @oauth[:token_secret] =
+			File.read(CONF[:twitter_oauth_file]).split
+	end
+
+	def account
+		CONF[:twitter_account]
 	end
 
 	def handle_idle(irc)
@@ -256,7 +263,7 @@ class Twitter
 		@poll_twitter_timeout ||= t
 		if t > @poll_twitter_timeout
 			begin
-				Timeout.timeout(40) { poll_twitter(irc) }
+				Timeout.timeout(20) { poll_twitter(irc) }
 			rescue Timeout::Error
 			end
 			@poll_twitter_timeout = Time.now + (CONF[:twitter_poll_delay] || 120) + rand(30)
@@ -295,22 +302,8 @@ class Twitter
 		end
 	end
 
-	def account
-		CONF[:twitter_account]
-	end
-
-	def http_post(url, pd={})
-		pass = CONF[:twitter_password] || File.read(CONF[:twitter_password_file]).chomp
-		HttpClient.open("http://#{account}:#{pass}@twitter.com/") { |h| h.post(url, pd) }
-	end
-
-	def http_get(url)
-		pass = CONF[:twitter_password] || File.read(CONF[:twitter_password_file]).chomp
-		HttpClient.open("http://#{account}:#{pass}@twitter.com/") { |h| h.get(url) }
-	end
-
 	def poll_twitter(irc)
-		rss = parsehtml http_get("/statuses/friends_timeline/#{account}.rss").content, true
+		rss = parsehtml oauth_get('/1/statuses/home_timeline.rss').content, true
 		lastag = nil
 		rss.delete_if { |tag|
 			if tag.type == 'String'; lastag['str'] = twit_decode_html(tag['content']) ; true
@@ -337,7 +330,7 @@ class Twitter
 			end
 		}
 
-		rpl = parsehtml http_get("/statuses/replies.xml").content, true
+		rpl = parsehtml oauth_get('/1/statuses/mentions.xml').content, true
 		lastag = nil
 		rpl.delete_if { |tag|
 			if tag.type == 'String'; lastag['str'] = twit_decode_html(tag['content']) ; true
@@ -367,22 +360,132 @@ class Twitter
 
 	def handle_msg(irc, msg, from, to)
 		case msg
-		when /^!tw(?:ee|i)t(?:t|ter)? (.*)/
-			msg = $1
-			msg = UnUTF8.new(msg).to_s
-			msg = HttpServer.htmlentitiesenc(msg)
-			pg = http_post('/statuses/update.xml', 'status'=>msg, 'source'=>'twitterircgateway')
+		when /^!tw(?:ee|i)t(?:t|ter)?\s+(\S.*)/
+			msg = auto2utf($1)
+			#msg = HttpServer.htmlentitiesenc(msg)
+			pg = oauth_post('/1/statuses/update.xml', 'status' => msg)
 			irc.repl(pg.status == 200 ? "http://twitter.com/#{account}" : 'fail')
-		when /^!follow (.*)/
-			pg = http_post("/friendships/create/#$1.xml")
+		when /^!follow\s+(\S.*)/
+			pg = oauth_post("/friendships/create.xml", 'screen_name' => $1, 'follow' => 'true')
 			irc.repl(pg.status == 200 ? 'ok' : 'fail')
-		when /^!nofollow (.*)/
-			pg = http_post("/friendships/destroy/#$1.xml")
+		when /^!nofollow\s+(\S.*)/
+			pg = oauth_post("/friendships/destroy.xml", 'screen_name' => $1)
 			irc.repl(pg.status == 200 ? 'ok' : 'fail')
 		end
 	end
 
 	def help ; "Twitter to irc - !twit <publish_msg> | !follow <account> | !nofollow <account>" end
+
+	# http get to a oauth-enabled server
+	# url should be the base url, with request parameters passed as a hash
+	# e.g. to get /foo/bar?a=b&c=d, use oauth_get("/foo/bar", "a" => "b", "c" => "d")
+	# (this is needed for the oauth signature)
+	def oauth_get(url, parms={})
+		pdata = parms.map { |k, v| v ? oauth_escape(k) + '=' + oauth_escape(v) : oauth_escape(k) }.join('&')
+		hdrs = oauth_hdr('GET', url, parms)
+		url += '?' + pdata if pdata != ''
+		HttpClient.open("https://api.twitter.com/") { |hc| hc.get(url, nil, hdrs) }
+	end
+
+	# post to a oauth-enabled server
+	# XXX we append the post data to the url (and still send as POST form) to work with the twitter website,
+	# but this is contrary to the OAuth RFC (from my understanding)
+	def oauth_post(url, parms={})
+		pdata = parms.map { |k, v| oauth_escape(k) + '=' + oauth_escape(v) }.join('&')
+		hdrs = oauth_hdr('POST', url, parms).merge('Content-type' => 'application/x-www-form-encoded')
+		url += '?' + pdata if pdata != ''	# XXX twitter-specific workaround
+		HttpClient.open("https://api.twitter.com/") { |hc| hc.post_raw(url, pdata, hdrs) }
+	end
+
+	# return the OAuth Authorization header
+	def oauth_hdr(method, url, parms={})
+		oauth = oauth_parms(method, url, parms)
+		{ 'Authorization' => 'OAuth ' + oauth.map { |k, v| "#{k}=\"#{oauth_escape(v)}\"" }.join(",\n    ") }
+	end
+
+	# return the oauth params hash (to be used in the authorization header / get params)
+	# from the method, pure url (no query parameters), and request parameters
+	# additionnal 'oauth_' header entries can be specified in the @oauth[:oauth_supp] hash (deleted here after use)
+	def oauth_parms(method, url, parms, base_url='https://api.twitter.com')
+		base_str = method.upcase + '&' + oauth_escape(base_url.downcase + url) + '&'
+
+		oauth = { 'oauth_consumer_key' => @oauth[:consumer_key], 'oauth_token' => @oauth[:token],
+				'oauth_nonce' => rand(1<<32).to_s(16), 'oauth_signature_method' => 'HMAC-SHA1',
+				'oauth_timestamp' => (Time.now.to_i + rand(180)-90) }
+
+		oauth.update @oauth.delete(:oauth_supp) if @oauth[:oauth_supp]
+		parms = oauth.merge parms
+		bdata = parms.to_a
+		#bdata += @oauth[:getp].to_a if @oauth[:getp]	# copy of the url parameters when POSTing
+
+		# get all request param, sorted, encode them individually, then reencode the full string
+		base_str += oauth_escape(bdata.sort.map { |k, v| oauth_escape(k) + '=' + oauth_escape(v) }.join('&'))
+
+		oauth.merge 'oauth_signature' => oauth_hmacsha1(base_str)
+	end
+
+	# oauth-specific url encoding (needed for crypto signature correctness)
+	def oauth_escape(str)
+		str.to_s.gsub(/[^a-zA-Z0-9_~.-]/) { |o| '%%%02X' % o.unpack('C') }
+	end
+
+	def oauth_hmacsha1(text)
+		key = oauth_escape(@oauth[:consumer_secret]) + '&' + oauth_escape(@oauth[:token_secret])
+		mac = OpenSSL::HMAC.digest(OpenSSL::Digest::Digest.new('sha1'), key, text)
+		[mac].pack('m*').split.join	# base64 encode
+	end
+
+	# to create your oauth parameters: log on twitter, click the 'api' link, create your application
+	# initialize the @oauth hash with the provided consummer token/secret
+	# run this function, it will query the website for a temporary token, and direct you to an url
+	# visit the url, accept, and paste the pin code to the prompt, this will create the oauth_creds file
+	# with the user credentials.
+	#
+	# use this in a console script, not in the irc bot !
+	def oauth_register_new_user
+		@oauth[:token] = @oauth[:token_secret] = ''
+
+		@oauth[:oauth_supp] = { 'oauth_callback' => 'oob' }
+		ans = oauth_post('/oauth/request_token')
+		if ans.status != 200
+			puts ans, "failed to request temporary token :("
+			return
+		end
+
+		foo = ans.content.split('&').inject({}) { |h, s| h.update Hash[*s.split('=', 2)] }
+		@oauth[:token] = foo['oauth_token']
+		puts "Please visit https://api.twitter.com/oauth/authorize?oauth_token=#{@oauth['oauth_token']}"
+
+		puts "Pin code?"
+		pin = gets.chomp
+
+		@oauth[:oauth_supp] = { 'oauth_verifier' => pin }
+		ans = oauth_post('/oauth/access_token')
+		if ans.status != 200
+			puts ans, "failed to request user token - bad pin ?"
+			return
+		end
+		foo = ans.content.split('&').inject({}) { |h, s| h.update Hash[*s.split('=', 2)] }
+		p foo
+		@oauth[:token] = foo['oauth_token']
+		@oauth[:token_secret] = foo['oauth_token_secret']
+
+		File.open('oauth_creds', 'a') { |fd| fd.puts @oauth[:consumer_token], @oauth[:consumer_secret], @oauth[:token], @oauth[:token_secret] }
+		puts 'oauth_creds created'
+		#puts oauth_get('/1/account/verify_credentials.xml')
+	end
+
+
+	# take a string, convert it to utf8 if it is not already
+	# works pretty well for iso-8859-1, untested with others
+	def auto2utf(s)
+		b = s.unpack('C*')
+		if b.find { |c| c >= 0x80 }  and not b.find { |c| c & 0xc0 == 0x80 }
+			b.map { |b| b >= 0x80 ? [0xc0 | ((b & 0xc0) >> 6), 0x80 | (b & 0x3f)] : b }.flatten.pack('C*')
+		else
+			s
+		end
+	end
 end
 
 class Quote
@@ -906,8 +1009,8 @@ CONF = {
 	:admin_nick => 'bob',
 	:admin_re => /^bob!~marcel@roots.org$/,
 	:twitter_account => 'bla',
-	:twitter_password => 'blabla',
-	:plugins => [Admin, GoogleSearch, GoogleTranslate, RSS, Twitter, Quote, Url, Seen, Op, Help, Youtube]
+	:twitter_oauth_file => 'secret_oauth.txt',
+	:plugins => [Admin, GoogleSearch, GoogleTranslate, RSS, Twitter, Quote, Url, Seen, Op, Help]
 }
 
 IrcBot.start
