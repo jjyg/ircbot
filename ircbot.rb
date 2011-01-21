@@ -632,8 +632,8 @@ class Url
 				HttpClient.open(u) { |h|
 					h.othersite_redirect = lambda { |u_, rec|
 						next if rec
-						pt ||= ''
-						pt << u_ << ' '
+						pt ? pt << ' - ' : pt = ''
+						pt << u_
 						dump_url(irc, u_, pt, rec_cnt+1) if rec_cnt < 4
 						nil
 					}
