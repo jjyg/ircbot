@@ -594,44 +594,9 @@ class Url
 		if msg =~ /\/\S*\//
 			list = (File.readlines('urls.txt').uniq.map { |u| u.split.first } rescue [])
 			msg.scan(%r{\S+\.\S+/\S*/\S*|\S+://\S*}) { |u|
-				t = pt = nil
-				if u =~ %r{(.*twitter.com)/#!(/.*/status/.*)}
-					u = $1 + $2
-					t = u + ' '
-				end
-				if list.include? u
-					pt = 'old'
-				end
-				begin
-					u = u+'/' if u =~ %r{://[^/]*$}
-					Timeout.timeout(40) {
-						HttpClient.open(u) { |h|
-							next if not ps = h.get(u).parse
-							if d = ps.find { |e| e.type == 'meta' and e['name'] == 'description' }
-								d = d['content']
-							end
-							ps.each { |e|
-								case e.type
-								when 'title'; t ||= ''
-								when 'String'; t << e['content'] if t
-								when '/title'
-									if t and d and t.index(': ')
-										twitwho, twitwhat = t.split(': ', 2)
-										twitwhat = twitwhat.chomp(' ...')
-										if twitwhat == d[0, twitwhat.length]
-											t = twitwho + ': ' + d
-										end
-									end
-									irc.repl "#{pt + ' - ' if pt}" + t[0, 512] if t and t != ''
-									break
-								end
-							}
-						}
-					}
-				rescue Object
-					#irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
-				end
-				File.open('urls.txt', 'a') { |fd| fd.puts "#{u}   #{t[0, 512] if t}" }
+				pt = nil
+				pt = 'old' if list.include? u
+				dump_url(irc, u, pt)
 			}
 		end
 
@@ -653,6 +618,51 @@ class Url
 			end
 			nr.times { |i| irc.repl "#{list[-i-1]}" }
 		end
+	end
+
+	def dump_url(irc, u, pt=nil, rec_cnt=0)
+		t = nil
+		if u =~ %r{(.*twitter.com)/#!(/.*/status/.*)}
+			u = $1 + $2
+			t = u + ' '
+		end
+		begin
+			u = u+'/' if u =~ %r{://[^/]*$}
+			Timeout.timeout(40) {
+				HttpClient.open(u) { |h|
+					h.othersite_redirect = lambda { |u_, rec|
+						next if rec
+						pt ||= ''
+						pt << u_ << ' '
+						dump_url(irc, u_, pt, rec_cnt+1) if rec_cnt < 4
+						nil
+					}
+					next if not ps = h.get(u).parse
+					if d = ps.find { |e| e.type == 'meta' and e['name'] == 'description' }
+						d = d['content']
+					end
+					ps.each { |e|
+						case e.type
+						when 'title'; t ||= ''
+						when 'String'; t << e['content'] if t
+						when '/title'
+							if t and d and t.index(': ')
+								twitwho, twitwhat = t.split(': ', 2)
+								twitwhat = twitwhat.chomp(' ...')
+								if twitwhat == d[0, twitwhat.length]
+									t = twitwho + ': ' + d
+								end
+							end
+							irc.repl "#{pt + ' - ' if pt}" + t[0, 512] if t and t != ''
+							break
+						end
+					}
+				}
+			}
+		rescue Object
+			#irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
+		end
+		File.open('urls.txt', 'a') { |fd| fd.puts "#{u}   #{t[0, 512] if t}" }
 	end
 
 	def help ; "Recall last <n> urls shown on the chan matching a pattern - !url 6 toto.*tutu" end
