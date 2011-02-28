@@ -7,7 +7,6 @@
 require 'socket'
 require 'time'
 require 'timeout'
-require 'utf8decode'
 begin ; require 'libhttpclient' ; rescue LoadError ; end
 begin ; require 'openssl' ; rescue LoadError ; end
 
@@ -66,10 +65,11 @@ class Ruby
 	end
 
 	def handle_msg(irc, msg, from, to)
-		case msg
-		when /^!ruby (.*)/
-			eval $1
-		end
+		# uncomment the next line if you want to enable
+		# arbitrary ruby code exec from the registered admin
+		#case msg
+		#when /^!ruby (.*)/; eval $1
+		#end
 	end
 
 	def help ; "Execute arbitrary ruby commands - !ruby irc.repl 'foo'" end
