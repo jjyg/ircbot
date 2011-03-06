@@ -644,7 +644,7 @@ class Url
 					ps.each { |e|
 						case e.type
 						when 'title'; t ||= ''
-						when 'String'; t << e['content'] if t
+						when 'String'; t << HttpServer.htmlentitiesdec(e['content']) if t
 						when '/title'
 							if t and d and t.index(': ')
 								twitwho, twitwhat = t.split(': ', 2)
