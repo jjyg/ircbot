@@ -622,7 +622,7 @@ class Url
 
 	def dump_url(irc, u, pt=nil, rec_cnt=0)
 		t = nil
-		if u =~ %r{(.*twitter.com)/#!(/.*/status/.*)}
+		if u =~ %r{(.*twitter.com)/#!(/.*/status(?:es)?/.*)}
 			u = $1 + $2
 			t = u + ' '
 		end
