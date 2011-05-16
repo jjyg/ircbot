@@ -654,11 +654,13 @@ class Url
 								end
 							end
 							irc.repl "#{pt + ' - ' if pt}" + t[0, 512] if t and t != ''
+							pt = t = nil
 							break
 						end
 					}
 				}
 			}
+			irc.repl pt if pt
 		rescue Object
 			#irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
 		end
