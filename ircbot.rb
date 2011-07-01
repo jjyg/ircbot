@@ -654,7 +654,7 @@ class Url
 								end
 							end
 							irc.repl "#{pt + ' - ' if pt}" + t[0, 512] if t and t != ''
-							pt = t = nil
+							pt = nil
 							break
 						end
 					}
