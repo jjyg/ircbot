@@ -139,11 +139,10 @@ class GoogleTranslate
 	end
 
 	def translate(l1, l2, msg)
-		HttpClient.open('www.google.com') { |h|
-			p = h.get("/uds/Gtranslate?callback=cb&context=22&langpair=#{l1}%7C#{l2}&key=notsupplied&v=1.0&q=" + HttpServer.urlenc(msg))
-			if p.status == 200 and transl = p.content[/\{"translatedText":"(.*)"\}, /, 1]
-				transl.gsub!(/\\u00(..)/) { $1.hex.chr }
-				HttpServer.htmlentitiesdec(transl)
+		HttpClient.open('translate.google.com') { |h|
+			p = h.get("/translate_a/t?client=t&sl=#{l1}&tl=#{l2}&text=" + HttpServer.urlenc(msg))
+			if p.status == 200
+				p.content[/\["(.*?)",/, 1]
 			end
 		}
 	end
