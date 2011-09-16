@@ -898,6 +898,7 @@ class IrcBot
                         @sock.sync_close = true
                         @sock.connect
                 end
+		send "pass #{CONF[:ircd_pass]}" if CONF[:ircd_pass]
 		send "user #@uhost", "nick #@nick"
 		loop do
 			r, w, e = IO.select([@sock])
@@ -1021,6 +1022,7 @@ CONF = {
 	:ircd => 'irc.lol.com',
 	#:ircd_port => 6667,
 	#:ircd_ssl => true,
+	#:ircd_pass => 'lolz',
 	:chan => '#koolz',
 	#:chan_pass => 's3cr3t',
 	:nick => '`bot',
