@@ -891,17 +891,29 @@ class IrcBot
 
 	def plugins ; [@plugin_misc, @plugin_msg, @plugin_admin, @plugin_idle] end
 
+	# wait until data can be read on sock
+	# returns true on data, false on timeout
+	def wait_read(s, timeout=nil)
+		return true if s.respond_to?(:pending) and s.pending > 0
+		r, w, e = IO.select([s], nil, nil, timeout)
+		r.to_a.include?(s)
+	end
+
 	def connect
 		@sock = TCPSocket.open @host, @port
                 if CONF[:ircd_ssl]
                         @sock = OpenSSL::SSL::SSLSocket.new(@sock, OpenSSL::SSL::SSLContext.new)
                         @sock.sync_close = true
-                        @sock.connect
-                end
+			@sock.connect
+			# YAY OPEN FUCKING SSL
+			def @sock.pending
+				@rbuffer.to_s.length + super()
+			end
+		end
 		send "pass #{CONF[:ircd_pass]}" if CONF[:ircd_pass]
 		send "user #@uhost", "nick #@nick"
 		loop do
-			r, w, e = IO.select([@sock])
+			wait_read(@sock)
 			l = @sock.gets.chomp
 			puts l if $VERBOSE
 			case l.split[1]
@@ -920,10 +932,9 @@ class IrcBot
 	end
 
 	def run_loop
-		r, w, e = IO.select [@sock], nil, nil, 0.5
-		if not r
+		if not wait_read(@sock, 0.5)
 			handle_timeout
-		elsif r.include? @sock
+		else
 			handle_sock @sock.gets.chomp
 		end
 	end
