@@ -79,7 +79,7 @@ class GoogleSearch
 	def initialize(irc)
 		irc.plugin_msg << self
 	end
-	
+
 	def handle_msg(irc, msg, from, to)
 		case msg
 		when /^!(?:search|google) +(.*)/
@@ -901,9 +901,9 @@ class IrcBot
 
 	def connect
 		@sock = TCPSocket.open @host, @port
-                if CONF[:ircd_ssl]
-                        @sock = OpenSSL::SSL::SSLSocket.new(@sock, OpenSSL::SSL::SSLContext.new)
-                        @sock.sync_close = true
+		if CONF[:ircd_ssl]
+			@sock = OpenSSL::SSL::SSLSocket.new(@sock, OpenSSL::SSL::SSLContext.new)
+			@sock.sync_close = true
 			@sock.connect
 			# YAY OPEN FUCKING SSL
 			def @sock.pending
@@ -999,11 +999,13 @@ class IrcBot
 		exit! if fork
 		while chld = fork
 			sleep(1200)
-			loop { begin
+			loop {
+				begin
 					Process.waitpid(chld)
 				rescue Errno::ECHILD
 					break
-				end }
+				end
+			}
 		end
 		load __FILE__
 		new.run
