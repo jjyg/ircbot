@@ -35,6 +35,12 @@ class Admin
 			irc.send 'quit :requested'
 		when /^!quit (.*)/
 			irc.send "quit :#$1"
+		when /^!join (.*)/
+			irc.send "join #$1"
+		when /^!part (.*)/
+			irc.send "part #$1"
+		when '!part'
+			irc.send "part #{to}"
 		when /^!raw (.*)/
 			irc.send $1
 		when /^!plugin (load|unload|reload|list)(.*)/
@@ -801,7 +807,9 @@ class Op
 	def handle_msg(irc, msg, from, to)
 		case msg
 		when '!op'
-			irc.send "mode #{irc.chan} +o #{from.sub(/!.*/, '')}"
+			tg = to
+			tg = irc.chan if tg[0] != ?# and tg[0] != ?&
+			irc.send "mode #{tg} +o #{from.sub(/!.*/, '')}"
 		when '!keepop'
 			@keepop = true
 			irc.repl 'ok'
@@ -924,6 +932,8 @@ class IrcBot
 			end
 		end
 		send "join #@chan #{CONF[:chan_pass]}"
+
+		CONF[:more_chans].each { |c| send "join #{c}" } if CONF[:more_chans]
 	end
 
 	def run
@@ -1038,6 +1048,7 @@ CONF = {
 	#:ircd_pass => 'lolz',
 	:chan => '#koolz',
 	#:chan_pass => 's3cr3t',
+	#:more_chans => ['#foo', '#bar bar_pass'],
 	:nick => '`bot',
 	:admin_nick => 'bob',
 	:admin_re => /^bob!~marcel@roots.org$/,
