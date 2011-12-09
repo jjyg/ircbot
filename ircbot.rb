@@ -643,6 +643,13 @@ class Url
 						nil
 					}
 					next if not ps = h.get(u).parse
+					if d = ps.find { |e| e.type == 'meta' and e['http-equiv'] == 'refresh' and e['content'] =~ /0;URL=(.*)/i }
+						# handle t.co style html redirects
+						pt ? pt << ' - ' : pt = ''
+						pt << $1
+						dump_url(irc, $1, pt, rec_cnt+1) if rec_cnt < 4
+						pt = nil
+					end
 					if d = ps.find { |e| e.type == 'meta' and e['name'] == 'description' }
 						d = d['content']
 					end
