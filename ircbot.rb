@@ -311,7 +311,7 @@ class Twitter
 	def fold_xml(parse)
 		lastag = nil
 		parse.delete_if { |tag|
-			if tag.type == 'String'; lastag['str'] = twit_decode_html(tag['content']) ; true
+			if lastag and tag.type == 'String'; lastag['str'] = twit_decode_html(tag['content']) ; true
 			elsif lastag and tag.type == '/'+lastag.type; lastag = nil; true
 			else lastag = tag; false
 			end
@@ -377,7 +377,7 @@ class Twitter
 			irc.repl(pg.status == 200 ? "http://twitter.com/#{account}" : 'fail')
 		when /^!follow\s+(\S.*)/
 			pg = oauth_post('/friendships/create.xml', 'screen_name' => $1, 'follow' => 'true')
-			irc.repl(pg.status == 200 ? 'ok' : 'fail')
+			irc.repl(pg.status == 200 ? 'ok' : 'fail ' + pg.content.inspect)
 		when /^!nofollow\s+(\S.*)/
 			pg = oauth_post('/friendships/destroy.xml', 'screen_name' => $1)
 			irc.repl(pg.status == 200 ? 'ok' : 'fail')
