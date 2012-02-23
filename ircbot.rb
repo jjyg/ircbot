@@ -629,7 +629,6 @@ class Url
 		t = nil
 		if u =~ %r{(.*twitter.com)/#!(/.*/status(?:es)?/.*)}
 			u = $1 + $2
-			t = u + ' '
 		end
 		begin
 			rescan = false
@@ -653,11 +652,6 @@ class Url
 					end
 					if d = ps.find { |e| e.type == 'meta' and e['name'] == 'description' }
 						d = d['content']
-						@last_url_rescan ||= Time.now - 61
-						if @last_url_rescan < Time.now - 60 and d =~ /http/
-							rescan = true
-							@last_url_rescan = Time.now
-						end
 					end
 					ps.each { |e|
 						case e.type
@@ -669,6 +663,11 @@ class Url
 								twitwhat = twitwhat.chomp(' ...')
 								if twitwhat == d[0, twitwhat.length]
 									t = twitwho + ': ' + d
+								end
+								@last_url_rescan ||= Time.now - 61
+								if @last_url_rescan < Time.now - 60 and d =~ /http/
+									rescan = true
+									@last_url_rescan = Time.now
 								end
 							end
 							irc.repl "#{pt + ' - ' if pt}" + t[0, 512], rescan if t and t != ''
