@@ -334,7 +334,7 @@ class Twitter
 			when 'item'
 				if good and date > @lasttweetseen and done <= 3
 					@lasttweetseen = date
-					irc.pm "tweet from #{text}#{date2delay(date)}", irc.chan
+					irc.pm "tweet from #{text}#{date2delay(date)}", irc.chan, true
 					done += 1
 				end
 			end
@@ -355,7 +355,7 @@ class Twitter
 			when 'status'
 				if fol != 'true' and date > @lastreplseen and done <= 3
 					@lastreplseen = date
-					irc.pm "tweet from #{user}: #{text}#{date2delay(date)}", irc.chan
+					irc.pm "tweet from #{user}: #{text}#{date2delay(date)}", irc.chan, true
 					done += 1
 				end
 			end
@@ -632,6 +632,7 @@ class Url
 			t = u + ' '
 		end
 		begin
+			rescan = false
 			u = u+'/' if u =~ %r{://[^/]*$}
 			Timeout.timeout(40) {
 				HttpClient.open(u) { |h|
@@ -652,6 +653,11 @@ class Url
 					end
 					if d = ps.find { |e| e.type == 'meta' and e['name'] == 'description' }
 						d = d['content']
+						@last_url_rescan ||= Time.now - 61
+						if @last_url_rescan < Time.now - 60 and d =~ /http/
+							rescan = true
+							@last_url_rescan = Time.now
+						end
 					end
 					ps.each { |e|
 						case e.type
@@ -665,7 +671,7 @@ class Url
 									t = twitwho + ': ' + d
 								end
 							end
-							irc.repl "#{pt + ' - ' if pt}" + t[0, 512] if t and t != ''
+							irc.repl "#{pt + ' - ' if pt}" + t[0, 512], rescan if t and t != ''
 							pt = nil
 							break
 						end
@@ -963,15 +969,16 @@ class IrcBot
 		}
 	end
 
-	def pm(l, dst=@chan)
+	def pm(l, dst=@chan, rescan=false)
 		l.to_s.gsub("\r", '').each { |l|	# g hax fix
 			l.chomp!
 			send "PRIVMSG #{dst} :#{l.empty? ? ' ' : l}"
+			handle_privmsg @nick, dst, l if rescan
 		}
 	end
 
 	attr_accessor :repltarget
-	def repl(l) pm l, @repltarget end
+	def repl(l, rescan=false) pm(l, @repltarget, rescan) end
 
 	def handle_sock l
 		begin
