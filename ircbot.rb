@@ -651,7 +651,7 @@ class Url
 						pt = nil
 					end
 					if d = ps.find { |e| e.type == 'meta' and e['name'] == 'description' }
-						d = d['content']
+						d = HttpServer.htmlentitiesdec(d['content'])
 					end
 					ps.each { |e|
 						case e.type
