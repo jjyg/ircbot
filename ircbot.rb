@@ -107,6 +107,9 @@ class GoogleSearch
 					stat != 1
 				}
 				url ||= 'notfound'
+				if url =~ /^\/url?(.*)/ and moo = $1.split('&').map { |s| s.split('=', 2) }.assoc('url')
+					url = HttpServer.htmlentitiesdec(moo[1])
+				end
 				pg.parse[0].type = 'body' if not pg.parse.empty?        # get_text needs <body>
 				irc.repl "#{url} #{pg.get_text.split.join(' ')[0..400]}"
 			end
