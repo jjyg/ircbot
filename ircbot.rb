@@ -96,13 +96,16 @@ class GoogleSearch
 				stat = 0
 				url = nil
 				calc = nil
+				hidden = 0
 				pg.parse.delete_if { |t|
 					case t.type
+					when 'div'; hidden += 1 if hidden > 0 or t['style'] == 'display:none'
+					when '/div'; hidden -= 1 if hidden > 0
 					when 'Comment'; stat += 1 if t['content'] == 'm' or t['content'] == 'n'
 					when 'a'; url ||= t['href'] if stat == 1
 					when 'h2'; calc = '' if t['class'] == 'r'
 					when '/h2'; if calc ; irc.repl calc ; calc = nil ; end
-					when 'String'; if calc ; calc << t['content'] ; end
+					when 'String'; if calc ; calc << t['content'] ; end ; next true if hidden > 0
 					end
 					stat != 1
 				}
