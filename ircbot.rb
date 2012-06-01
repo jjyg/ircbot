@@ -633,7 +633,8 @@ class Url
 
 	def dump_url(irc, u, pt=nil, rec_cnt=0)
 		t = nil
-		if u =~ %r{(.*twitter.com)/#!(/.*/status(?:es)?/.*)}
+		if u =~ %r{(.*twitter.com)(?:/#!)?(/.*/status(?:es)?/.*)}
+			itsatweet = true
 			u = $1 + $2
 		end
 		begin
@@ -656,31 +657,29 @@ class Url
 						dump_url(irc, $1, pt, rec_cnt+1) if rec_cnt < 4
 						pt = nil
 					end
-					if d = ps.find { |e| e.type == 'meta' and e['name'] == 'description' }
-						d = HttpServer.htmlentitiesdec(d['content'])
-					end
+					t = ''
+					tt = ''
+					intweet = false
+					intitle = false
 					ps.each { |e|
 						case e.type
-						when 'title'; t ||= ''
-						when 'String'; t << HttpServer.htmlentitiesdec(e['content']) if t
-						when '/title'
-							if t and d and t.index(': ')
-								twitwho, twitwhat = t.split(': ', 2)
-								twitwhat = twitwhat.chomp(' ...')
-								if twitwhat == d[0, twitwhat.length]
-									t = twitwho + ': ' + d
-								end
-								@last_url_rescan ||= Time.now - 61
-								if @last_url_rescan < Time.now - 60 and d =~ /http/
-									rescan = true
-									@last_url_rescan = Time.now
-								end
-							end
-							irc.repl "#{pt + ' - ' if pt}" + t[0, 512], rescan if t and t != ''
-							pt = nil
-							break
+						when 'title'; intitle = true
+						when '/title'; intitle = false; break unless itsatweet
+						when 'p'; intweet = true if itsatweet and e['class'].to_s.split(' ').include?('tweet-text')
+						when '/p'; break if intweet
+						when 'String'; (intweet ? tt : t) << HttpServer.htmlentitiesdec(e['content']) if intitle or intweet
 						end
 					}
+					t = tt if tt != ''
+					if t != ''
+						@last_url_rescan ||= Time.now - 61
+						if @last_url_rescan < Time.now - 60 and t =~ /http/
+							rescan = true
+							@last_url_rescan = Time.now
+						end
+						irc.repl "#{pt + ' - ' if pt}" + t[0, 512], rescan
+						pt = nil
+					end
 				}
 			}
 			irc.repl pt if pt
