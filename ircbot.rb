@@ -657,8 +657,8 @@ class Url
 						dump_url(irc, $1, pt, rec_cnt+1) if rec_cnt < 4
 						pt = nil
 					end
-					t = ''
-					tt = ''
+					t = []
+					tt = []
 					intweet = false
 					intitle = false
 					ps.each { |e|
@@ -670,14 +670,14 @@ class Url
 						when 'String'; (intweet ? tt : t) << HttpServer.htmlentitiesdec(e['content']) if intitle or intweet
 						end
 					}
-					t = tt if tt != ''
-					if t != ''
+					t = tt if tt != []
+					if t != []
 						@last_url_rescan ||= Time.now - 61
 						if @last_url_rescan < Time.now - 60 and t =~ /http/
 							rescan = true
 							@last_url_rescan = Time.now
 						end
-						irc.repl "#{pt + ' - ' if pt}" + t[0, 512], rescan
+						irc.repl "#{pt + ' - ' if pt}" + t.join(' ')[0, 512], rescan
 						pt = nil
 					end
 				}
