@@ -176,7 +176,10 @@ class RSS
 				Timeout.timeout(40) { poll_rss(irc) }
 			rescue Timeout::Error
 			end
-			@poll_rss = Time.now + (CONF[:rss_poll_delay] || 120) + rand(30)
+			delay = (CONF[:rss_poll_delay] || 1800) + rand(30)
+			nrss = (File.exist?('rss.txt') ? File.readlines('rss.txt').length : 0)
+			delay /= [1, [8, nrss].min].max
+			@poll_rss = Time.now + delay
 		end
 	rescue Object
 		irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
