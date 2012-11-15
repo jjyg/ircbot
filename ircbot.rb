@@ -1025,11 +1025,12 @@ class IrcBot
 	end
 
 	def self.run_loop
-		$stdin.close rescue nil
-		$stdout.close rescue nil
-		$stderr.close rescue nil
+		# rb19 cant motherfucking fork after $stdout.close...
 		exit! if fork
 		while chld = fork
+			$stdin.close rescue nil
+			$stdout.close rescue nil
+			$stderr.close rescue nil
 			sleep(1200)
 			loop {
 				begin
@@ -1039,6 +1040,9 @@ class IrcBot
 				end
 			}
 		end
+		$stdin.close rescue nil
+		$stdout.close rescue nil
+		$stderr.close rescue nil
 		load __FILE__
 		new.run
 	end
