@@ -708,7 +708,7 @@ class Seen
 			what = {'part' => 'leaving', 'quit' => 'quitting:', 'nick' => 'changing nick to',
 				'kick' => 'kicked', 'join' => 'joining', 'privmsg' => 'saying' }[what.downcase.split.first]
 			seen = {}
-			File.read('seen.txt').each { |sl|
+			File.readlines('seen.txt').each { |sl|
 				if sl =~ /^(\d+) (\S+) (.*)/
 					seen[$2.downcase] = [$1.to_i, $3]
 				end
@@ -724,8 +724,8 @@ class Seen
 		when /^!seen (\S+)/
 			tg = $1.downcase
 			seen = false
-			File.read('seen.txt').each { |l|
-				l =~ /^(\d+) (\S+) (.*)/
+			File.readlines('seen.txt').each { |l|
+				next unless l =~ /^(\d+) (\S+) (.*)/
 				d, w, t = $1, $2, $3
 				next if w.downcase != tg
 				seen = true
