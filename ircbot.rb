@@ -978,7 +978,7 @@ class IrcBot
 	end
 
 	def pm(ll, dst=@chan, rescan=false)
-		ll.to_s.gsub("\r", '').each { |l|	# g hax fix
+		ll.to_s.gsub("\r", '').each_line { |l|	# g hax fix
 			l.chomp!
 			send "PRIVMSG #{dst} :#{l.empty? ? ' ' : l}"
 			handle_privmsg @nick, dst, l if rescan
