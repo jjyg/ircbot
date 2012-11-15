@@ -924,7 +924,7 @@ class IrcBot
 	# returns true on data, false on timeout
 	def wait_read(s, timeout=nil)
 		return true if s.respond_to?(:pending) and s.pending > 0
-		r = IO.select([s], nil, nil, timeout)[0]
+		r = IO.select([s], nil, nil, timeout).to_a[0]
 		r.to_a.include?(s)
 	end
 
