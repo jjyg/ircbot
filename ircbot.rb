@@ -502,7 +502,7 @@ class Twitter
 	def auto2utf(s)
 		b = s.unpack('C*')
 		if b.find { |c| c >= 0x80 }  and not b.find { |c| c & 0xc0 == 0x80 }
-			b.map { |b| b >= 0x80 ? [0xc0 | ((b & 0xc0) >> 6), 0x80 | (b & 0x3f)] : b }.flatten.pack('C*')
+			b.map { |c| c >= 0x80 ? [0xc0 | ((c & 0xc0) >> 6), 0x80 | (c & 0x3f)] : c }.flatten.pack('C*')
 		else
 			s
 		end
@@ -653,7 +653,7 @@ class Url
 						nil
 					}
 					next if not ps = h.get(u).parse
-					if d = ps.find { |e| e.type == 'meta' and e['http-equiv'] == 'refresh' and e['content'] =~ /0;URL=(.*)/i }
+					if ps.find { |e| e.type == 'meta' and e['http-equiv'] == 'refresh' and e['content'] =~ /0;URL=(.*)/i }
 						# handle t.co style html redirects
 						pt ? pt << ' - ' : pt = ''
 						pt << $1
@@ -708,9 +708,10 @@ class Seen
 			what = {'part' => 'leaving', 'quit' => 'quitting:', 'nick' => 'changing nick to',
 				'kick' => 'kicked', 'join' => 'joining', 'privmsg' => 'saying' }[what.downcase.split.first]
 			seen = {}
-			File.read('seen.txt').each { |l|
-				l =~ /^(\d+) (\S+) (.*)/
+			File.read('seen.txt').each { |sl|
+				if sl =~ /^(\d+) (\S+) (.*)/
 					seen[$2.downcase] = [$1.to_i, $3]
+				end
 			} rescue nil
 			seen[who] = [Time.now.to_i, "#{what.downcase} #{arg}"]
 			File.open('seen.tmp', 'w') { |fd| fd.puts seen.map { |k, (d, t)| "#{d} #{k} #{t}" }.sort }
@@ -857,7 +858,7 @@ class Youtube
 			tok = pg.content.to_s.split('&').map { |s| s.split('=', 2) }.assoc('token').to_a[1]
 			url = nil
 			if tok and fmt = [37, 22, 35, 18, 5, 17, 13].find { |f| HttpClient.open("http://www.youtube.com/") { |h|
-				url = "http://www.youtube.com/get_video?video_id=#{id}&t=#{tok}&fmt=#{f}"
+				url = "http://www.youtube.com/get_video?video_id=#{id}&t=#{tok}&fmt=#{fmt}"
 				h.head(url).status != 404
 			} }
 				irc.repl url
@@ -879,7 +880,7 @@ class Help
 			irc.repl irc.plugins.flatten.uniq.map { |plug| plug.class.name }.sort.join(' ')
 		when /^!help (.*)/
 			name = $1.downcase
-			pl = irc.plugin_msg.sort_by { |pl| pl.class.name.to_s.length }.find { |pl| pl.class.name.downcase.include? name }
+			pl = irc.plugin_msg.sort_by { |pl_| pl_.class.name.to_s.length }.find { |pl_| pl_.class.name.downcase.include?(name) }
 			if not pl
 				irc.repl 'unknown plugin'
 			else
@@ -923,7 +924,7 @@ class IrcBot
 	# returns true on data, false on timeout
 	def wait_read(s, timeout=nil)
 		return true if s.respond_to?(:pending) and s.pending > 0
-		r, w, e = IO.select([s], nil, nil, timeout)
+		r = IO.select([s], nil, nil, timeout)[0]
 		r.to_a.include?(s)
 	end
 
@@ -976,8 +977,8 @@ class IrcBot
 		}
 	end
 
-	def pm(l, dst=@chan, rescan=false)
-		l.to_s.gsub("\r", '').each { |l|	# g hax fix
+	def pm(ll, dst=@chan, rescan=false)
+		ll.to_s.gsub("\r", '').each { |l|	# g hax fix
 			l.chomp!
 			send "PRIVMSG #{dst} :#{l.empty? ? ' ' : l}"
 			handle_privmsg @nick, dst, l if rescan
