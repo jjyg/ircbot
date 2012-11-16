@@ -542,7 +542,7 @@ class Quote
 		arg = $2
 		owner = from
 
-		q = (File.read('quotes.txt').map { |l| Quote.parse l } rescue [])
+		q = (File.readlines('quotes.txt').map { |l| Quote.parse l } rescue [])
 		arg.strip!
 		parseint = proc {
 			if not arg.empty? and (nr = Integer(arg) rescue nil) and nr < q.length and nr >= 0
