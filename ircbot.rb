@@ -154,7 +154,7 @@ class GoogleTranslate
 		HttpClient.open('translate.google.com') { |h|
 			p = h.get("/translate_a/t?client=t&sl=#{l1}&tl=#{l2}&text=" + HttpServer.urlenc(msg))
 			if p.status == 200
-				p.content[/\["(.*?)",/, 1]
+				p.content.force_encoding('binary')[/\["(.*?)",/, 1]
 			end
 		}
 	end
