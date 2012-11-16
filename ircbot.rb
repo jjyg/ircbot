@@ -177,7 +177,7 @@ class RSS
 			rescue Timeout::Error
 			end
 			delay = (CONF[:rss_poll_delay] || 1800) + rand(30)
-			nrss = (File.exist?('rss.txt') ? File.readlines('rss.txt').length : 0)
+			nrss = (File.exist?('rss.txt') ? File.open('rss.txt', 'rb') { |fd| fd.readlines }.length : 0)
 			delay /= [1, [8, nrss].min].max
 			@poll_rss = Time.now + delay
 		end
@@ -192,7 +192,7 @@ class RSS
 
 		@cur_rss ||= -1
 
-		rsses = File.readlines('rss.txt').map { |l| l.chomp } - ['']
+		rsses = File.open('rss.txt', 'rb') { |fd| fd.readlines }.map { |l| l.chomp } - ['']
 		return if rsses.empty?
 
 		@cur_rss += 1
@@ -226,7 +226,7 @@ class RSS
 	def handle_msg(irc, msg, from, to)
 		case msg
 		when '!rss'
-			rsses = File.readlines('rss.txt')
+			rsses = File.open('rss.txt', 'rb') { |fd| fd.readlines }
 			irc.repl rsses.map { |rss| rss.split[0] }.join(' ')
 		when /^!rss (.*)/
 			name, url = $1.split
@@ -235,14 +235,14 @@ class RSS
 				url = "http://#{url}" if not url.include? '://'
 				File.open('rss.txt', 'a') { |fd| fd.puts "#{name} #{url}" }
 				irc.repl 'ok'
-			elsif not rss = File.readlines('rss.txt').find { |l| l.split[0] == name }
+			elsif not rss = File.open('rss.txt', 'rb') { |fd| fd.readlines }.find { |l| l.split[0] == name }
 				irc.repl 'unknown'
 			else
 				irc.repl rss.chomp
 			end
 		when /^!norss (.*)/
 			name = $1
-			rsses = File.readlines('rss.txt')
+			rsses = File.open('rss.txt', 'rb') { |fd| fd.readlines }
 			if rss = rsses.find { |l_| l_.split[0] == name }
 				rsses.delete rss
 				File.open('rss.txt.tmp', 'w') { |fd| fd.puts rsses }
@@ -542,7 +542,7 @@ class Quote
 		arg = $2
 		owner = from
 
-		q = (File.readlines('quotes.txt').map { |l| Quote.parse l } rescue [])
+		q = (File.open('quotes.txt', 'rb') { |fd| fd.readlines }.map { |l| Quote.parse l } rescue [])
 		arg.strip!
 		parseint = proc {
 			if not arg.empty? and (nr = Integer(arg) rescue nil) and nr < q.length and nr >= 0
@@ -606,7 +606,7 @@ class Url
 
 	def handle_msg(irc, msg, from, to)
 		if msg =~ /\/\S*\//
-			list = (File.readlines('urls.txt').uniq.map { |u| u.split.first } rescue [])
+			list = (File.open('urls.txt', 'rb') { |fd| fd.readlines }.uniq.map { |u| u.split.first } rescue [])
 			msg.scan(%r{\S+\.\S+/\S*/\S*|\S+://\S*}) { |u|
 				pt = nil
 				pt = 'old' if list.include? u
@@ -617,7 +617,7 @@ class Url
 		case msg
 		when /^!urls?( .*|$)/
 			arg = $1.strip
-			list = (File.readlines('urls.txt').uniq rescue [])
+			list = (File.open('urls.txt', 'rb') { |fd| fd.readlines }.uniq rescue [])
 			case arg.strip
 			when /^(\d*)$/
 				nr = $1.empty? ? 4 : $1.to_i
@@ -708,7 +708,7 @@ class Seen
 			what = {'part' => 'leaving', 'quit' => 'quitting:', 'nick' => 'changing nick to',
 				'kick' => 'kicked', 'join' => 'joining', 'privmsg' => 'saying' }[what.downcase.split.first]
 			seen = {}
-			File.readlines('seen.txt').each { |sl|
+			File.open('seen.txt', 'rb') { |fd| fd.readlines }.each { |sl|
 				if sl =~ /^(\d+) (\S+) (.*)/
 					seen[$2.downcase] = [$1.to_i, $3]
 				end
@@ -724,7 +724,7 @@ class Seen
 		when /^!seen (\S+)/
 			tg = $1.downcase
 			seen = false
-			File.readlines('seen.txt').each { |l|
+			File.open('seen.txt', 'rb') { |fd| fd.readlines }.each { |l|
 				next unless l =~ /^(\d+) (\S+) (.*)/
 				d, w, t = $1, $2, $3
 				next if w.downcase != tg
