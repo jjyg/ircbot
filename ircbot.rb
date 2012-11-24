@@ -93,30 +93,60 @@ class GoogleSearch
 			term = $1
 			pg = HttpClient.open("http://www.google.com/") { |h| h.get("/search?q=#{HttpServer.urlenc term}") }
 			if pg.status == 200
-				stat = 0
-				url = nil
-				calc = nil
-				hidden = 0
-				pg.parse.delete_if { |t|
-					case t.type
-					when 'div'; hidden += 1 if hidden > 0 or t['style'] == 'display:none'
-					when '/div'; hidden -= 1 if hidden > 0
-					when 'Comment'; stat += 1 if t['content'] == 'm' or t['content'] == 'n'
-					when 'a'; url ||= t['href'] if stat == 1
-					when 'h2'; calc = '' if t['class'] == 'r'
-					when '/h2'; if calc ; irc.repl calc ; calc = nil ; end
-					when 'String'; if calc ; calc << t['content'] ; end ; next true if hidden > 0
-					end
-					stat != 1
-				}
-				url ||= 'notfound'
-				if url =~ /^\/url?(.*)/ and moo = $1.split('&').map { |s| s.split('=', 2) }.assoc('url')
-					url = HttpServer.htmlentitiesdec(moo[1])
-				end
-				pg.parse[0].type = 'body' if not pg.parse.empty?        # get_text needs <body>
-				irc.repl "#{url} #{pg.get_text.split.join(' ')[0..400]}"
+				parse_page(irc, pg)
 			end
 		end
+	end
+
+	def parse_page(irc, pg)
+		url = nil
+		hidden = ires = resultstats = spell = calc = 0
+		pre = 1; post = 0
+		pg.parse.delete_if { |t|
+			pre = 0 if t.type == '/form'
+			next true if pre > 0 or post > 0
+
+			case t.type
+			when 'div'
+				hidden += 1 if hidden > 0 or t['style'] == 'display:none'
+				ires += 1 if ires > 0 or t['id'] == 'ires'
+				resultstats += 1 if resultstats > 0 or t['id'] == 'resultStats'
+			when '/div'
+				hidden -= 1 if hidden > 0
+				post = 1 if ires == 1
+				ires -= 1 if ires > 0
+				resultstats -= 1 if resultstats > 0
+			when 'h2'
+				calc += 1 if t['class'] == 'r'
+			when '/h2'
+				calc -= 1 if calc > 0
+			when 'table'
+				hidden += 1 if ires > 0
+			when '/table'
+				hidden -= 1 if ires > 0
+			when 'span'
+				spell += 1 if t['class'] == 'spell'
+				spell -= 1 if t['class'] == 'spell_orig'
+			when '/form'
+				pre = 0
+			when 'a'
+				url ||= t['href'] if ires > 0
+			when 'String'
+				t['content'] = '(' + t['content'] + ')' if resultstats > 0
+				next true if hidden > 0
+				irc.repl t['content'] if calc > 0
+				next true if ires <= 0 and resultstats <= 0 and spell <= 0
+				post = 1 if t['content'] == '...'
+			end
+			false
+		}
+		url ||= 'notfound'
+		if url =~ /^\/url\?(.*)/ and moo = $1.split('&').map { |s| s.split('=', 2) }.assoc('url')
+			url = HttpServer.htmlentitiesdec(moo[1])
+		end
+		pg.parse[0].type = 'body' if not pg.parse.empty?        # get_text needs <body>
+		irc.repl "#{url} #{pg.get_text.split.join(' ')[0..400]}"
+
 	end
 
 	def help ; "Shows the first search result from google - !search <search token>" end
