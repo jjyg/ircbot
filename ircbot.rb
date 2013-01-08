@@ -141,7 +141,7 @@ class GoogleSearch
 			false
 		}
 		url ||= 'notfound'
-		if url =~ /^\/url\?(.*)/ and moo = $1.split('&').map { |s| s.split('=', 2) }.assoc('url')
+		if url =~ /^\/url\?(.*)/ and kv = $1.split('&').map { |s| s.split('=', 2) } and moo = kv.assoc('url') || kv.assoc('q')
 			url = HttpServer.htmlentitiesdec(moo[1])
 		end
 		pg.parse[0].type = 'body' if not pg.parse.empty?        # get_text needs <body>
