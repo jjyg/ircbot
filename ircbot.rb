@@ -387,6 +387,10 @@ class Twitter
 			irc.repl list_following
 		when /^!followers$/
 			irc.repl list_followers
+		when %r{https?://twitter.com/.*/status(?:es)?/(\d+)}
+			twit = oauth_get_json('/1.1/statuses/show.json', 'id' => $1)
+			date = Time.parse(twit['created_at'])
+			irc.repl "@#{twit['user']['screen_name'].inspect[1...-1]}: #{twittext(twit)}#{date2delay(date)}", true
 		end
 	end
 
@@ -636,6 +640,7 @@ class Url
 	def dump_url(irc, u, pt=nil, rec_cnt=0)
 		t = nil
 		if u =~ %r{(.*twitter.com)(?:/#!)?(/.*/status(?:es)?/.*)}
+			return
 			itsatweet = true
 			u = $1 + $2
 		end
