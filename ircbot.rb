@@ -7,6 +7,7 @@
 require 'socket'
 require 'time'
 require 'timeout'
+begin ; require 'json' ; rescue LoadError ; end
 begin ; require 'libhttpclient' ; rescue LoadError ; end
 begin ; require 'openssl' ; rescue LoadError ; end
 
@@ -320,25 +321,6 @@ class Twitter
 	end
 
 
-	def twit_decode_html(str)
-		HttpServer.htmlentitiesdec(HttpServer.htmlentitiesdec(str)).gsub(/&#(x?\d+);/) {
-			# utf-8 encode
-			v = ($1[0] == ?x) ? $1[1..-1].to_i(16) : $1.to_i
-			next v.chr if v <= 255
-			next 'lol' if v > 0x1fffff
-			raw = ''
-			limit = 0x3f
-			while v > limit
-				raw << (0x80 | (v & 0x3f))
-				v >>= 6
-				limit >>= 1
-			end
-			len = raw.length+1
-			raw << (((0xff << (8-len)) & 0xff) | v)
-			raw.reverse!
-		}
-	end
-
 	def date2delay(date)
 		dt = (Time.now - date).to_i
 		if dt > 3600*36;  " il y a #{dt/3600/24}j"
@@ -348,65 +330,44 @@ class Twitter
 		end
 	end
 
-	# patch a html parse array, so that <foo>bar</foo>  =>  <foo str="bar" />
-	def fold_xml(parse)
-		lastag = nil
-		parse.delete_if { |tag|
-			if lastag and tag.type == 'String'; lastag['str'] = twit_decode_html(tag['content']) ; true
-			elsif lastag and tag.type == '/'+lastag.type; lastag = nil; true
-			else lastag = tag; false
-			end
-		}
+	def twittext(twit)
+		text = twit['text'].dup
+		twit['entities']['urls'].sort_by { |u| -u['indices'][0] }.each { |u|                                                                                   
+			text[u['indices'][0]..u['indices'][1]] = u['expanded_url']                                                                                     
+		}                                                                                                                                                      
+		text                                                                                                                                                   
 	end
 
 	def poll_twitter(irc)
-		rss = parsehtml oauth_get('/1/statuses/home_timeline.rss').content, true
-		fold_xml(rss)
-
 		done = 0
 		@lasttweetseen ||= Time.now - 24*3600
-		good = date = text = nil
-		rss.reverse_each { |tag|
-			val = tag['str']
-			case tag.type
-			when 'link';        good = (val and !val.include?("/#{account}/"))
-			when 'pubdate';     date = Time.parse(val)
-			when 'description'; text = val
-			when 'item'
-				if good and date > @lasttweetseen and done <= 3
-					@lasttweetseen = date
-					irc.pm "tweet from #{text}#{date2delay(date)}", irc.chan, true
-					done += 1
-				end
+		oauth_get_json('/1.1/statuses/home_timeline.json').reverse_each { |twit|
+			next if twit['user']['screen_name'] == account
+			date = Time.parse(twit['created_at'])
+			if date > @lasttweetseen and done <= 3
+				@lasttweetseen = date
+				irc.pm "tweet from #{twit['user']['screen_name'].inspect[1...-1]}: #{twittext(twit)}#{date2delay(date)}", irc.chan, true
+				done += 1
 			end
 		}
 
-		rpl = parsehtml oauth_get('/1/statuses/mentions.xml').content, true
-		fold_xml(rpl)
-
 		@lastreplseen ||= Time.now - 24*3600
-		date = text = user = fol = nil
-		rpl.reverse_each { |tag|
-			val = tag['str']
-			case tag.type
-			when 'screen_name'; user = val
-			when 'following';   fol = val
-			when 'text';        text = val
-			when 'created_at';  date = Time.parse(val)
-			when 'status'
-				if fol != 'true' and date > @lastreplseen and done <= 3
-					@lastreplseen = date
-					irc.pm "tweet from #{user}: #{text}#{date2delay(date)}", irc.chan, true
-					done += 1
-				end
+		oauth_get_json('/1.1/statuses/mentions_timeline.json').reverse_each { |twit|
+			date = Time.parse(twit['created_at'])
+			if date > @lastreplseen and done <= 3
+				@lastreplseen = date
+				irc.pm "tweet from #{twit['user']['screen_name'].inspect[1...-1]}: #{twittext(twit)}#{date2delay(date)}", irc.chan, true
+				done += 1
 			end
 		}
 	end
 
+	def list_following
+		oauth_get_json('/1.1/friends/list.json', 'skip_status' => 'true')['users'].map { |u| u['screen_name'] }.join(' ')
+	end
+
 	def list_followers
-		rpl = parsehtml oauth_get('/1/statuses/friends.xml').content, true
-		fold_xml(rpl)
-		rpl.find_all { |e| e.type == 'screen_name' }.reverse.map { |e| e['str'] }.join(' ')
+		oauth_get_json('/1.1/followers/list.json', 'skip_status' => 'true')['users'].map { |u| u['screen_name'] }.join(' ')
 	end
 
 	def handle_msg(irc, msg, from, to)
@@ -414,15 +375,17 @@ class Twitter
 		when /^!tw(?:ee|i)t(?:t|ter)?\s+(\S.*)/
 			msg = auto2utf($1)
 			#msg = HttpServer.htmlentitiesenc(msg)
-			pg = oauth_post('/1/statuses/update.xml', 'status' => msg)
+			pg = oauth_post('/1.1/statuses/update.json', 'status' => msg)
 			irc.repl(pg.status == 200 ? "http://twitter.com/#{account}" : 'fail')
 		when /^!follow\s+(\S.*)/
-			pg = oauth_post('/friendships/create.xml', 'screen_name' => $1, 'follow' => 'true')
+			pg = oauth_post('/1.1/friendships/create.json', 'screen_name' => $1, 'follow' => 'true')
 			irc.repl(pg.status == 200 ? 'ok' : 'fail ' + pg.content.inspect)
 		when /^!nofollow\s+(\S.*)/
-			pg = oauth_post('/friendships/destroy.xml', 'screen_name' => $1)
+			pg = oauth_post('/1.1/friendships/destroy.json', 'screen_name' => $1)
 			irc.repl(pg.status == 200 ? 'ok' : 'fail')
 		when /^!follow(ing|ed|s)$/
+			irc.repl list_following
+		when /^!followers$/
 			irc.repl list_followers
 		end
 	end
@@ -438,6 +401,10 @@ class Twitter
 		hdrs = oauth_hdr('GET', url, parms)
 		url += '?' + pdata if pdata != ''
 		HttpClient.open("https://api.twitter.com/") { |hc| hc.get(url, nil, hdrs) }
+	end
+
+	def oauth_get_json(url, parms={})
+		JSON.parse(oauth_get(url, parms).content)
 	end
 
 	# post to a oauth-enabled server
