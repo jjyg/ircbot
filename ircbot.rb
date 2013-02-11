@@ -388,6 +388,9 @@ class Twitter
 		when /^!followers$/
 			irc.repl list_followers
 		when %r{https?://twitter.com/.*/status(?:es)?/(\d+)}
+			@seen ||= {}
+			return if @seen[$1]
+			@seen[$1] = true
 			twit = oauth_get_json('/1.1/statuses/show.json', 'id' => $1)
 			date = Time.parse(twit['created_at'])
 			irc.repl "@#{twit['user']['screen_name'].inspect[1...-1]}: #{twittext(twit)}#{date2delay(date)}", true
@@ -639,10 +642,9 @@ class Url
 
 	def dump_url(irc, u, pt=nil, rec_cnt=0)
 		t = nil
-		if u =~ %r{(.*twitter.com)(?:/#!)?(/.*/status(?:es)?/.*)}
+		if u =~ %r{\btwitter\.com(/#!)?/.*/status(es)?/\d+([^\d/]|$)}
+			# already handled by Twitter module
 			return
-			itsatweet = true
-			u = $1 + $2
 		end
 		begin
 			rescan = false
@@ -665,19 +667,14 @@ class Url
 						pt = nil
 					end
 					t = []
-					tt = []
-					intweet = false
 					intitle = false
 					ps.each { |e|
 						case e.type
 						when 'title'; intitle = true
-						when '/title'; intitle = false; break unless itsatweet
-						when 'p'; intweet = true if itsatweet and e['class'].to_s.split(' ').include?('tweet-text')
-						when '/p'; break if intweet
-						when 'String'; (intweet ? tt : t) << HttpServer.htmlentitiesdec(e['content']) if intitle or intweet
+						when '/title'; intitle = false
+						when 'String'; t << HttpServer.htmlentitiesdec(e['content']) if intitle
 						end
 					}
-					t = tt if tt != []
 					if t != []
 						@last_url_rescan ||= Time.now - 61
 						if @last_url_rescan < Time.now - 60 and t =~ /http/
