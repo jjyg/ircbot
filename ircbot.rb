@@ -333,7 +333,7 @@ class Twitter
 	def twittext(twit)
 		text = twit['text'].dup
 		twit['entities']['urls'].sort_by { |u| -u['indices'][0] }.each { |u|                                                                                   
-			text[u['indices'][0]..u['indices'][1]] = u['expanded_url']                                                                                     
+			text[u['indices'][0]...u['indices'][1]] = u['expanded_url']                                                                                     
 		}                                                                                                                                                      
 		text                                                                                                                                                   
 	end
