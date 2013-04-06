@@ -947,7 +947,7 @@ class IrcBot
 			l = @sock.gets.chomp
 			puts l if $VERBOSE
 			case l.split[1]
-			when '376'; break
+			when '376', '422'; break	# end of motd / no motd
 			when '433'	# nick taken
 				@nick += rand(1000).to_s
 				send "nick #@nick"
