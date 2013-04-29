@@ -335,7 +335,7 @@ class Twitter
 		twit['entities']['urls'].sort_by { |u| -u['indices'][0] }.each { |u|                                                                                   
 			text[u['indices'][0]...u['indices'][1]] = u['expanded_url']                                                                                     
 		}                                                                                                                                                      
-		text                                                                                                                                                   
+		HttpServer.htmlentitiesdec(text)
 	end
 
 	def poll_twitter(irc)
