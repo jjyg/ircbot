@@ -673,6 +673,7 @@ class Url
 						when 'title'; intitle = true
 						when '/title'; intitle = false
 						when 'String'; t << HttpServer.htmlentitiesdec(e['content']) if intitle
+						when 'img'; irc.repl e['src'] if e['class'] =~ /media-slideshow-image/	# twitpics
 						end
 					}
 					if t != []
