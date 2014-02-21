@@ -691,7 +691,7 @@ class Url
 		rescue Object
 			#irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
 		end
-		File.open(CONF[:urls_cache_file], 'a') { |fd| fd.puts "#{u}   #{t[0, 512] if t}" }
+		File.open(CONF[:urls_cache_file], 'a') { |fd| fd.puts "#{u}   #{t.join(' ')[0, 512] if t}" }
 	end
 
 	def help ; "Recall last <n> urls shown on the chan matching a pattern - !url 6 toto.*tutu" end
