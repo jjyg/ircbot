@@ -210,7 +210,7 @@ class RSS
 			rescue Timeout::Error
 			end
 			delay = (CONF[:rss_poll_delay] || 1800) + rand(30)
-			nrss = (File.exist?('rss.txt') ? File.open('rss.txt', 'rb') { |fd| fd.readlines }.length : 0)
+			nrss = (File.exist?(CONF[:rss_cache_file]) ? File.open(CONF[:rss_cache_file], 'rb') { |fd| fd.readlines }.length : 0)
 			delay /= [1, [8, nrss].min].max
 			@poll_rss = Time.now + delay
 		end
@@ -221,11 +221,11 @@ class RSS
 
 
 	def poll_rss(irc)
-		return if not File.exist? 'rss.txt'
+		return if not File.exist?(CONF[:rss_cache_file])
 
 		@cur_rss ||= -1
 
-		rsses = File.open('rss.txt', 'rb') { |fd| fd.readlines }.map { |l| l.chomp } - ['']
+		rsses = File.open(CONF[:rss_cache_file], 'rb') { |fd| fd.readlines }.map { |l| l.chomp } - ['']
 		return if rsses.empty?
 
 		@cur_rss += 1
@@ -250,8 +250,8 @@ class RSS
 
 		# update last title
 		rsses[@cur_rss] = [name, url, title].join(' ')
-		File.open('rss.txt.tmp', 'w') { |fd| fd.puts rsses }
-		File.rename('rss.txt.tmp', 'rss.txt')
+		File.open(CONF[:rss_cache_file] + '.tmp', 'w') { |fd| fd.puts rsses }
+		File.rename(CONF[:rss_cache_file] + '.tmp', CONF[:rss_cache_file])
 
 		irc.pm "rss: #{name}  #{title}", irc.chan
 	end
@@ -259,27 +259,27 @@ class RSS
 	def handle_msg(irc, msg, from, to)
 		case msg
 		when '!rss'
-			rsses = File.open('rss.txt', 'rb') { |fd| fd.readlines }
+			rsses = File.open(CONF[:rss_cache_file], 'rb') { |fd| fd.readlines }
 			irc.repl rsses.map { |rss| rss.split[0] }.join(' ')
 		when /^!rss (.*)/
 			name, url = $1.split
 			url, name = name, url if name.to_s.include? '/' and not url.to_s.include? '/'
 			if url and url.include? '/'
 				url = "http://#{url}" if not url.include? '://'
-				File.open('rss.txt', 'a') { |fd| fd.puts "#{name} #{url}" }
+				File.open(CONF[:rss_cache_file], 'a') { |fd| fd.puts "#{name} #{url}" }
 				irc.repl 'ok'
-			elsif not rss = File.open('rss.txt', 'rb') { |fd| fd.readlines }.find { |l| l.split[0] == name }
+			elsif not rss = File.open(CONF[:rss_cache_file], 'rb') { |fd| fd.readlines }.find { |l| l.split[0] == name }
 				irc.repl 'unknown'
 			else
 				irc.repl rss.chomp
 			end
 		when /^!norss (.*)/
 			name = $1
-			rsses = File.open('rss.txt', 'rb') { |fd| fd.readlines }
+			rsses = File.open(CONF[:rss_cache_file], 'rb') { |fd| fd.readlines }
 			if rss = rsses.find { |l_| l_.split[0] == name }
 				rsses.delete rss
-				File.open('rss.txt.tmp', 'w') { |fd| fd.puts rsses }
-				File.rename('rss.txt.tmp', 'rss.txt')
+				File.open(CONF[:rss_cache_file] + '.tmp', 'w') { |fd| fd.puts rsses }
+				File.rename(CONF[:rss_cache_file] + '.tmp', CONF[:rss_cache_file])
 				irc.repl 'ok'
 			else
 				irc.repl 'unknown'
@@ -497,7 +497,7 @@ class Twitter
 		@oauth[:token] = foo['oauth_token']
 		@oauth[:token_secret] = foo['oauth_token_secret']
 
-		File.open('oauth_creds', 'a') { |fd| fd.puts @oauth[:consumer_token], @oauth[:consumer_secret], @oauth[:token], @oauth[:token_secret] }
+		File.open(CONF[:twitter_oauth_file], 'a') { |fd| fd.puts @oauth[:consumer_token], @oauth[:consumer_secret], @oauth[:token], @oauth[:token_secret] }
 		puts 'oauth_creds created'
 		#puts oauth_get('/1/account/verify_credentials.xml')
 	end
@@ -548,7 +548,7 @@ class Quote
 		arg = $2
 		owner = from
 
-		q = (File.open('quotes.txt', 'rb') { |fd| fd.readlines }.map { |l| Quote.parse l } rescue [])
+		q = (File.open(CONF[:quotes_cache_file], 'rb') { |fd| fd.readlines }.map { |l| Quote.parse l } rescue [])
 		arg.strip!
 		parseint = proc {
 			if not arg.empty? and (nr = Integer(arg) rescue nil) and nr < q.length and nr >= 0
@@ -559,7 +559,7 @@ class Quote
 		case type
 		when 'add'
 			quote = Quote.new(Time.now, owner, arg.gsub(/< ?(\S+?)>/, "\00303<\\1>\003"))
-			File.open('quotes.txt', 'a') { |fd| fd.puts quote.store }
+			File.open(CONF[:quotes_cache_file], 'a') { |fd| fd.puts quote.store }
 			irc.repl "added quote #{q.length}"
 		when '', 'get', 'topic'
 			case arg
@@ -591,8 +591,8 @@ class Quote
 			case type
 			when 'del'
 				qq = q.delete_at(nr)
-				File.open('quotes.tmp', 'w') { |fd| fd.puts q.map { |qt| qt.store } }
-				File.rename 'quotes.tmp', 'quotes.txt'
+				File.open(CONF[:quotes_cache_file] + '.tmp', 'w') { |fd| fd.puts q.map { |qt| qt.store } }
+				File.rename(CONF[:quotes_cache_file] + '.tmp', CONF[:quotes_file])
 				irc.repl "deleted (#{nr}) #{qq}"
 			when 'who'
 				irc.repl "quote #{nr} by #{q[nr].owner}"
@@ -612,7 +612,7 @@ class Url
 
 	def handle_msg(irc, msg, from, to)
 		if msg =~ /\/\S*\//
-			list = (File.open('urls.txt', 'rb') { |fd| fd.readlines }.uniq.map { |u| u.split.first } rescue [])
+			list = (File.open(CONF[:urls_cache_file], 'rb') { |fd| fd.readlines }.uniq.map { |u| u.split.first } rescue [])
 			msg.scan(%r{\S+\.\S+/\S*/\S*|\S+://\S*}) { |u|
 				pt = nil
 				pt = 'old' if list.include? u
@@ -623,7 +623,7 @@ class Url
 		case msg
 		when /^!urls?( .*|$)/
 			arg = $1.strip
-			list = (File.open('urls.txt', 'rb') { |fd| fd.readlines }.uniq rescue [])
+			list = (File.open(CONF[:urls_cache_file], 'rb') { |fd| fd.readlines }.uniq rescue [])
 			case arg.strip
 			when /^(\d*)$/
 				nr = $1.empty? ? 4 : $1.to_i
@@ -691,7 +691,7 @@ class Url
 		rescue Object
 			#irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
 		end
-		File.open('urls.txt', 'a') { |fd| fd.puts "#{u}   #{t[0, 512] if t}" }
+		File.open(CONF[:urls_cache_file], 'a') { |fd| fd.puts "#{u}   #{t[0, 512] if t}" }
 	end
 
 	def help ; "Recall last <n> urls shown on the chan matching a pattern - !url 6 toto.*tutu" end
@@ -710,14 +710,14 @@ class Seen
 			what = {'part' => 'leaving', 'quit' => 'quitting:', 'nick' => 'changing nick to',
 				'kick' => 'kicked', 'join' => 'joining', 'privmsg' => 'saying' }[what.downcase.split.first]
 			seen = {}
-			File.open('seen.txt', 'rb') { |fd| fd.readlines }.each { |sl|
+			File.open(CONF[:seen_cache_file], 'rb') { |fd| fd.readlines }.each { |sl|
 				if sl =~ /^(\d+) (\S+) (.*)/
 					seen[$2.downcase] = [$1.to_i, $3]
 				end
 			} rescue nil
 			seen[who] = [Time.now.to_i, "#{what.downcase} #{arg}"]
-			File.open('seen.tmp', 'w') { |fd| fd.puts seen.map { |k, (d, t)| "#{d} #{k} #{t}" }.sort }
-			File.rename('seen.tmp', 'seen.txt')
+			File.open(CONF[:seen_cache_file] + '.tmp', 'w') { |fd| fd.puts seen.map { |k, (d, t)| "#{d} #{k} #{t}" }.sort }
+			File.rename(CONF[:seen_cache_file] + '.tmp', CONF[:seen_cache_file])
 		end
 	end
 
@@ -726,7 +726,7 @@ class Seen
 		when /^!seen (\S+)/
 			tg = $1.downcase
 			seen = false
-			File.open('seen.txt', 'rb') { |fd| fd.readlines }.each { |l|
+			File.open(CONF[:seen_cache_file], 'rb') { |fd| fd.readlines }.each { |l|
 				next unless l =~ /^(\d+) (\S+) (.*)/
 				d, w, t = $1, $2, $3
 				next if w.downcase != tg
@@ -1082,6 +1082,10 @@ CONF = {
 	:admin_re => /^bob!~marcel@roots.org$/,
 	:twitter_account => 'bla',
 	:twitter_oauth_file => 'secret_oauth.txt',
+	:quotes_cache_file => 'quotes.txt',
+	:rss_cache_file => 'rss.txt',
+	:seen_cache_file => 'seen.txt',
+	:urls_cache_file => 'urls.txt',
 	:plugins => [Admin, GoogleSearch, GoogleTranslate, RSS, Twitter, Quote, Url, Seen, Op, Help]
 }
 
