@@ -216,7 +216,7 @@ class RSS
 		end
 	rescue Object
 		irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
-		sleep 2
+		@poll_rss = Time.now + 1800 + rand(30)
 	end
 
 
@@ -307,17 +307,17 @@ class Twitter
 
 	def handle_idle(irc)
 		t = Time.now
-		@poll_twitter_timeout ||= t
-		if t > @poll_twitter_timeout
+		@poll_twitter ||= t
+		if t > @poll_twitter
 			begin
 				Timeout.timeout(20) { poll_twitter(irc) }
 			rescue Timeout::Error
 			end
-			@poll_twitter_timeout = Time.now + (CONF[:twitter_poll_delay] || 120) + rand(30)
+			@poll_twitter = Time.now + (CONF[:twitter_poll_delay] || 120) + rand(30)
 		end
 	rescue Object
 		irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
-		sleep 2
+		@poll_twitter = Time.now + 1800 + rand(30)
 	end
 
 
