@@ -592,7 +592,7 @@ class Quote
 			when 'del'
 				qq = q.delete_at(nr)
 				File.open(CONF[:quotes_cache_file] + '.tmp', 'w') { |fd| fd.puts q.map { |qt| qt.store } }
-				File.rename(CONF[:quotes_cache_file] + '.tmp', CONF[:quotes_file])
+				File.rename(CONF[:quotes_cache_file] + '.tmp', CONF[:quotes_cache_file])
 				irc.repl "deleted (#{nr}) #{qq}"
 			when 'who'
 				irc.repl "quote #{nr} by #{q[nr].owner}"
