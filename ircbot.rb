@@ -92,7 +92,7 @@ class GoogleSearch
 		when /^!(?:search|google) +(.*)/
 			return if not defined? HttpClient
 			term = $1
-			pg = HttpClient.open("http://www.google.com/") { |h| h.get("/search?q=#{HttpServer.urlenc term}") }
+			pg = HttpClient.open("http://www.google.fr/") { |h| h.get("/search?q=#{HttpServer.urlenc term}") }
 			if pg.status == 200
 				parse_page(irc, pg)
 			end
@@ -254,6 +254,9 @@ class RSS
 		File.rename(CONF[:rss_cache_file] + '.tmp', CONF[:rss_cache_file])
 
 		irc.pm "rss: #{name}  #{title}", irc.chan
+	rescue Object
+		irc.pm "#{$!.class} #{$!.message} #{url}", CONF[:admin_nick]
+		raise
 	end
 
 	def handle_msg(irc, msg, from, to)
@@ -332,8 +335,10 @@ class Twitter
 
 	def twittext(twit)
 		text = twit['text'].dup
-		twit['entities']['urls'].sort_by { |u| -u['indices'][0] }.each { |u|                                                                                   
-			text[u['indices'][0]...u['indices'][1]] = u['expanded_url']                                                                                     
+
+		(twit['entities']['urls'].to_a + twit['entities']['media'].to_a).sort_by { |u| -u['indices'][0] }.each { |u|
+			tg = u['media_url_https'] || u['media_url'] || u['expanded_url_https'] || u['expanded_url']
+			text[u['indices'][0]...u['indices'][1]] = tg if tg
 		}                                                                                                                                                      
 		HttpServer.htmlentitiesdec(text)
 	end
@@ -342,6 +347,7 @@ class Twitter
 		done = 0
 		@lasttweetseen ||= Time.now - 24*3600
 		oauth_get_json('/1.1/statuses/home_timeline.json').reverse_each { |twit|
+begin
 			next if twit['user']['screen_name'] == account
 			date = Time.parse(twit['created_at'])
 			if date > @lasttweetseen and done <= 3
@@ -349,6 +355,11 @@ class Twitter
 				irc.pm "tweet from #{twit['user']['screen_name'].inspect[1...-1]}: #{twittext(twit)}#{date2delay(date)}", irc.chan, true
 				done += 1
 			end
+rescue
+	irc.pm "poll_twitter = #{twit.inspect[0,200]}", CONF[:admin_nick]
+	raise
+end
+
 		}
 
 		@lastreplseen ||= Time.now - 24*3600
@@ -642,7 +653,7 @@ class Url
 
 	def dump_url(irc, u, pt=nil, rec_cnt=0)
 		t = nil
-		if u =~ %r{\btwitter\.com(/#!)?/.*/status(es)?/\d+([^\d/]|$)}
+		if u =~ %r{\btwitter\.com(/#!)?/.*/status(es)?/\d+}
 			# already handled by Twitter module
 			return
 		end
