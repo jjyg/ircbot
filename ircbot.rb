@@ -963,6 +963,10 @@ class IrcBot
 			when '433'	# nick taken
 				@nick += rand(1000).to_s
 				send "nick #@nick"
+			else
+				if l =~ /^ping (.*)$/i
+					send "pong #$1"
+				end
 			end
 		end
 		send "join #@chan #{CONF[:chan_pass]}"
