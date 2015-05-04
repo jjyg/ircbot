@@ -7,6 +7,8 @@
 require 'socket'
 require 'time'
 require 'timeout'
+require 'digest/sha1'
+require 'digest/sha2'
 begin ; require 'json' ; rescue LoadError ; end
 begin ; require 'libhttpclient' ; rescue LoadError ; end
 begin ; require 'openssl' ; rescue LoadError ; end
@@ -882,6 +884,40 @@ class Youtube
 	def help ; "shows youtube video url" end
 end
 
+class SSLCheck
+	def initialize(irc)
+		irc.plugin_msg << self
+	end
+
+	def handle_msg(irc, msg, from, to)
+		case msg
+		when /!sslcert (\S+)(\s+\d+)?/
+			host = $1
+			port = ($2 || 443).to_i
+			err = nil
+			ans = begin
+				Timeout.timeout(4) {
+					TCPSocket.open(host, port) { |s|
+						begin
+							s = OpenSSL::SSL::SSLSocket.new(s, OpenSSL::SSL::SSLContext.new)
+							s.connect
+							crt = s.peer_cert.to_der
+							"SSL hash: SHA1=#{Digest::SHA1.hexdigest(crt)} SHA512=#{Digest::SHA512.hexdigest(crt)}"
+						rescue
+							"SSL: Connect error"
+						end
+					}
+				}
+			rescue Timeout::Error
+				"SSL: Connection timeout"
+			end
+			irc.repl ans
+		end
+	end
+
+	def help ; "show SSL cert fingerprints: !sslcert ubuntu.com 443" end
+end
+
 class Help
 	def initialize(irc)
 		irc.plugin_msg << self
@@ -1101,7 +1137,7 @@ CONF = {
 	:rss_cache_file => 'rss.txt',
 	:seen_cache_file => 'seen.txt',
 	:urls_cache_file => 'urls.txt',
-	:plugins => [Admin, GoogleSearch, GoogleTranslate, RSS, Twitter, Quote, Url, Seen, Op, Help]
+	:plugins => [Admin, GoogleSearch, GoogleTranslate, RSS, Twitter, Quote, Url, Seen, Op, SSLCheck, Help]
 }
 
 IrcBot.start
