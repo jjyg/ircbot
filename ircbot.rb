@@ -183,7 +183,7 @@ class GoogleTranslate
 
 	def translate(l1, l2, msg)
 		HttpClient.open('translate.google.com') { |h|
-			p = h.get("/translate_a/t?client=t&sl=#{l1}&tl=#{l2}&text=" + HttpServer.urlenc(msg))
+			p = h.get("/translate_a/single?client=t&sl=#{l1}&tl=#{l2}&dt=t&q=" + HttpServer.urlenc(msg))
 			if p.status == 200
 				str = p.content
 				str = str.force_encoding('binary') if str.respond_to?(:force_encoding)
