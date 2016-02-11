@@ -348,7 +348,7 @@ class Twitter
 	def poll_twitter(irc)
 		done = 0
 		@lasttweetseen ||= Time.now - 24*3600
-		oauth_get_json('/1.1/statuses/home_timeline.json').reverse_each { |twit|
+		oauth_get_json('/1.1/statuses/home_timeline.json').to_a.reverse_each { |twit|
 begin
 			next if twit['user']['screen_name'] == account
 			date = Time.parse(twit['created_at'])
@@ -365,7 +365,7 @@ end
 		}
 
 		@lastreplseen ||= Time.now - 24*3600
-		oauth_get_json('/1.1/statuses/mentions_timeline.json').reverse_each { |twit|
+		oauth_get_json('/1.1/statuses/mentions_timeline.json').to_a.reverse_each { |twit|
 			date = Time.parse(twit['created_at'])
 			if date > @lastreplseen and done <= 3
 				@lastreplseen = date
@@ -680,12 +680,14 @@ class Url
 						pt = nil
 					end
 					t = []
-					intitle = false
+					intitle = inhead = false
 					ps.each { |e|
 						case e.type
+						when 'head'; inhead = true
+						when '/head'; inhead = false
 						when 'title'; intitle = true
 						when '/title'; intitle = false
-						when 'String'; t << HttpServer.htmlentitiesdec(e['content']) if intitle
+						when 'String'; t << HttpServer.htmlentitiesdec(e['content']) if intitle and inhead
 						when 'img'; irc.repl e['src'] if e['class'] =~ /media-slideshow-image/	# twitpics
 						end
 					}
