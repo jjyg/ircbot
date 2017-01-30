@@ -400,7 +400,7 @@ end
 			irc.repl list_following
 		when /^!followers$/
 			irc.repl list_followers
-		when %r{https?://twitter.com/.*/status(?:es)?/(\d+)}
+		when %r{https?://(?:mobile\.)?twitter.com/.*/status(?:es)?/(\d+)}
 			@seen ||= {}
 			return if @seen[$1]
 			@seen[$1] = true
