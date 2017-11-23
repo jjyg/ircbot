@@ -329,9 +329,9 @@ class Twitter
 	def date2delay(date)
 		dt = (Time.now - date).to_i
 		if dt > 3600*36;  " il y a #{dt/3600/24}j"
-		elsif dt > 3600;  " il y a #{dt/3600}h#{(dt%3600)/60}"
+		elsif dt > 3600;  " il y a #{dt/3600}h#{'%02d' % ((dt%3600)/60)}"
 		elsif dt > 15*60; " il y a #{dt/60}mn"
-		elsif dt > 2*60;  " il y a #{dt/60}mn#{dt%60}"
+		elsif dt > 2*60;  " il y a #{dt/60}mn#{'%02d' % (dt%60)}"
 		end
 	end
 
