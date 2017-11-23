@@ -336,19 +336,26 @@ class Twitter
 	end
 
 	def twittext(twit)
-		text = twit['text'].dup
+		text = (twit['full_text'] || twit['text']).dup
 
-		(twit['entities']['urls'].to_a + twit['entities']['media'].to_a).sort_by { |u| -u['indices'][0] }.each { |u|
-			tg = u['media_url_https'] || u['media_url'] || u['expanded_url_https'] || u['expanded_url']
+		ents = twit['entities']['urls'].to_a + twit['entities']['media'].to_a
+		(twit['extended_entities'] || {})['media'].to_a.each { |ee|
+			ents.delete_if { |st| st['id'] == ee['id'] }
+			ents << ee
+		}
+		ents.sort_by { |u| -u['indices'][0] }.each { |u|
+			vid_url = ((u['video_info'] || {})['variants'].to_a.first || {})['url']
+			tg = vid_url || u['media_url_https'] || u['media_url'] || u['expanded_url_https'] || u['expanded_url']
 			text[u['indices'][0]...u['indices'][1]] = tg if tg
-		}                                                                                                                                                      
+		}
+
 		HttpServer.htmlentitiesdec(text)
 	end
 
 	def poll_twitter(irc)
 		done = 0
 		@lasttweetseen ||= Time.now - 24*3600
-		oauth_get_json('/1.1/statuses/home_timeline.json').to_a.reverse_each { |twit|
+		oauth_get_json('/1.1/statuses/home_timeline.json', 'tweet_mode' => 'extended').to_a.reverse_each { |twit|
 begin
 			next if twit['user']['screen_name'] == account
 			date = Time.parse(twit['created_at'])
@@ -365,7 +372,7 @@ end
 		}
 
 		@lastreplseen ||= Time.now - 24*3600
-		oauth_get_json('/1.1/statuses/mentions_timeline.json').to_a.reverse_each { |twit|
+		oauth_get_json('/1.1/statuses/mentions_timeline.json', 'tweet_mode' => 'extended').to_a.reverse_each { |twit|
 			date = Time.parse(twit['created_at'])
 			if date > @lastreplseen and done <= 3
 				@lastreplseen = date
@@ -376,11 +383,11 @@ end
 	end
 
 	def list_following
-		oauth_get_json('/1.1/friends/list.json', 'skip_status' => 'true')['users'].map { |u| u['screen_name'] }.join(' ')
+		oauth_get_json('/1.1/friends/list.json', 'skip_status' => 'true', 'tweet_mode' => 'extended')['users'].map { |u| u['screen_name'] }.join(' ')
 	end
 
 	def list_followers
-		oauth_get_json('/1.1/followers/list.json', 'skip_status' => 'true')['users'].map { |u| u['screen_name'] }.join(' ')
+		oauth_get_json('/1.1/followers/list.json', 'skip_status' => 'true', 'tweet_mode' => 'extended')['users'].map { |u| u['screen_name'] }.join(' ')
 	end
 
 	def handle_msg(irc, msg, from, to)
@@ -404,7 +411,7 @@ end
 			@seen ||= {}
 			return if @seen[$1]
 			@seen[$1] = true
-			twit = oauth_get_json('/1.1/statuses/show.json', 'id' => $1)
+			twit = oauth_get_json('/1.1/statuses/show.json', 'id' => $1, 'tweet_mode' => 'extended')
 			date = Time.parse(twit['created_at'])
 			irc.repl "@#{twit['user']['screen_name'].inspect[1...-1]}: #{twittext(twit)}#{date2delay(date)}", true
 		end
