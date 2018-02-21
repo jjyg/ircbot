@@ -634,6 +634,8 @@ class Url
 		if msg =~ /\/\S*\//
 			list = (File.open(CONF[:urls_cache_file], 'rb') { |fd| fd.readlines }.uniq.map { |u| u.split.first } rescue [])
 			msg.scan(%r{\S+\.\S+/\S*/\S*|\S+://\S*}) { |u|
+				u = u+'/' if u =~ %r{://[^/]*$}
+				u = 'http://'+u if u !~ %r{://}
 				pt = nil
 				pt = 'old' if list.include? u
 				dump_url(irc, u, pt)
@@ -669,6 +671,7 @@ class Url
 		begin
 			rescan = false
 			u = u+'/' if u =~ %r{://[^/]*$}
+			u = 'http://'+u if u !~ %r{://}
 			Timeout.timeout(40) {
 				HttpClient.open(u) { |h|
 					h.othersite_redirect = lambda { |u_, rec|
