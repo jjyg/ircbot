@@ -806,7 +806,7 @@ class Op
 			if mm = chmod.find_all { |m, n| m[1] == ?v }.reverse.find { |m, n| n == irc.nick } and mm[0] == '+v'
 				@voiced = true
 			end
-			if mm = chmod.find_all { |m, n| m[1] == ?o }.reverse.find { |m, n| n == irc.nick } and mm[0] == '+o'
+			if mm = chmod.find_all { |m, n| m[1] == ?o or m[1] == ?q }.reverse.find { |m, n| n == irc.nick } and (mm[0] == '+o' or mm[0] == '+q')
 				#irc.send "who #{chan}"		# "who +uM blacklist
 				irc.send "names #{chan}"
 				@optmp = []
