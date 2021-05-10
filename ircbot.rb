@@ -640,8 +640,8 @@ class Url
 			msg.scan(%r{\S+\.\S+/\S*/\S*|\S+://\S*}) { |u|
 				u = u+'/' if u =~ %r{://[^/]*$}
 				u = 'http://'+u if u !~ %r{://}
-				pt = nil
-				pt = 'old' if list.include? u
+				pt = []
+				pt << 'old' if list.include? u
 				dump_url(irc, u, pt)
 			}
 		end
@@ -666,7 +666,7 @@ class Url
 		end
 	end
 
-	def dump_url(irc, u, pt=nil, rec_cnt=0)
+	def dump_url(irc, u, pt=[], rec_cnt=0)
 		t = nil
 		if u =~ %r{\btwitter\.com(/#!)?/.*/status(es)?/\d+}
 			# already handled by Twitter module
@@ -680,18 +680,20 @@ class Url
 				HttpClient.open(u) { |h|
 					h.othersite_redirect = lambda { |u_, rec|
 						next if rec
-						pt ? pt << ' - ' : pt = ''
-						pt << u_
+						case u_
+						when /^https:\/\/consent\.youtube\.com\//
+						else
+							pt << u_
+						end
 						dump_url(irc, u_, pt, rec_cnt+1) if rec_cnt < 4
 						nil
 					}
 					next if not ps = h.get(u).parse
 					if ps.find { |e| e.type == 'meta' and e['http-equiv'] == 'refresh' and e['content'] =~ /0;URL=(.*)/i }
 						# handle t.co style html redirects
-						pt ? pt << ' - ' : pt = ''
 						pt << $1
 						dump_url(irc, $1, pt, rec_cnt+1) if rec_cnt < 4
-						pt = nil
+						pt = []
 					end
 					t = []
 					intitle = inhead = false
@@ -711,12 +713,13 @@ class Url
 							rescan = true
 							@last_url_rescan = Time.now
 						end
-						irc.repl "#{pt + ' - ' if pt}" + t.join(' ')[0, 512], rescan
-						pt = nil
+						pt << t.join(' ')[0, 512]
+						irc.repl pt.join(' - '), rescan
+						pt = []
 					end
 				}
 			}
-			irc.repl pt if pt
+			irc.repl pt.join(' - ') if pt.first
 		rescue Object
 			#irc.pm "#{$!.class} #{$!.message} #{$!.backtrace.first}", CONF[:admin_nick]
 		end
