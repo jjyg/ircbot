@@ -302,8 +302,12 @@ class Twitter
 		irc.plugin_idle << self
 		irc.plugin_msg << self
 		@oauth = {}
-		@oauth[:consumer_key], @oauth[:consumer_secret], @oauth[:token], @oauth[:token_secret] =
-			File.read(CONF[:twitter_oauth_file]).split
+		begin
+			@oauth[:consumer_key], @oauth[:consumer_secret], @oauth[:token], @oauth[:token_secret] =
+			  File.read(CONF[:twitter_oauth_file]).split
+		rescue Errno::ENOENT
+			puts "no twitter oauth file"
+		end
 	end
 
 	def account
@@ -978,6 +982,10 @@ class IrcBot
 		CONF[:plugins].each { |p| p.new(self) }
 	end
 
+	def test(str)
+		@sock ||= $stdout
+		handle_privmsg('user', 'bot', str)
+	end
 
 	def plugins ; [@plugin_misc, @plugin_msg, @plugin_admin, @plugin_idle] end
 
@@ -1152,6 +1160,11 @@ CONF = {
 	:plugins => [Admin, GoogleSearch, GoogleTranslate, RSS, Twitter, Quote, Url, Seen, Op, SSLCheck, Help]
 }
 
-IrcBot.start
+if ARGV.first == 'test'
+	ARGV.shift
+	IrcBot.new.test(ARGV.join(' '))
+else
+	IrcBot.start
+end
 
 end
